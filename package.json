@@ -24,16 +24,6 @@
     "orchestration",
     "agents"
   ],
-  "activationEvents": [
-    "onView:trigen.controlCenter",
-    "onCommand:trigen.openConsole",
-    "onCommand:trigen.runHealthCheck",
-    "onCommand:trigen.loadRules",
-    "onCommand:trigen.dispatchParallel",
-    "onCommand:trigen.dispatchSerial",
-    "onCommand:trigen.dispatchGroup",
-    "onCommand:trigen.dispatchHandoff"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
