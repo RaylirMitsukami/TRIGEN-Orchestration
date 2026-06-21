@@ -11,30 +11,42 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
     label: "Codex",
     shortLabel: "Codex",
     officialExtensionIds: ["openai.chatgpt"],
+    authProviderIds: ["openai"],
     commandCandidates: [
       "codex",
       "/Applications/Codex.app/Contents/Resources/codex"
     ],
     defaultArgs: ["exec", "--json", "--skip-git-repo-check", "-C", "${workspaceFolder}", "-"],
-    docsUrl: "https://developers.openai.com/codex/ide"
+    docsUrl: "https://developers.openai.com/codex/ide",
+    loginUrl: "https://chatgpt.com/",
+    modelOptions: ["GPT-5.5", "GPT-5.4", "GPT-5.4 Mini"],
+    defaultModel: "GPT-5.5"
   },
   {
     id: "claude",
     label: "Claude Code",
     shortLabel: "Claude",
     officialExtensionIds: ["anthropic.claude-code"],
+    authProviderIds: ["anthropic", "claude"],
     commandCandidates: ["claude"],
     defaultArgs: ["-p", "-"],
-    docsUrl: "https://code.claude.com/docs/en/vs-code"
+    docsUrl: "https://code.claude.com/docs/en/vs-code",
+    loginUrl: "https://claude.ai/login",
+    modelOptions: ["Opus 4.8", "Sonnet 4.5", "Haiku 4.5"],
+    defaultModel: "Opus 4.8"
   },
   {
     id: "gemini",
     label: "Gemini Code Assist",
     shortLabel: "Gemini",
     officialExtensionIds: ["Google.geminicodeassist", "google.geminicodeassist"],
+    authProviderIds: ["google"],
     commandCandidates: ["gemini"],
     defaultArgs: ["-p", "-"],
-    docsUrl: "https://docs.cloud.google.com/gemini/docs/codeassist/set-up-gemini"
+    docsUrl: "https://docs.cloud.google.com/gemini/docs/codeassist/set-up-gemini",
+    loginUrl: "https://gemini.google.com/",
+    modelOptions: ["Gemini 3.1 Pro", "Gemini 3.1 Flash", "Gemini 2.5 Pro"],
+    defaultModel: "Gemini 3.1 Pro"
   }
 ];
 

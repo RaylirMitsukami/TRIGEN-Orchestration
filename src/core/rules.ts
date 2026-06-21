@@ -2,6 +2,15 @@ import { readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { RuleBundle, RuleDocument } from "./types";
 
+export const DEFAULT_RULE_FILE_NAMES = [
+  ".TRIGEN-Rules",
+  "AGENTS.md",
+  "TRIGEN.md",
+  "CLAUDE.md",
+  "GEMINI.md",
+  ".github/copilot-instructions.md"
+] as const;
+
 export async function loadRuleBundle(
   workspaceFolder: string,
   fileNames: readonly string[],

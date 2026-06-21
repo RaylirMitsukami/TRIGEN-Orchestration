@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { orchestrate } from "../core/orchestrator";
+import { inferDispatchMode, orchestrate } from "../core/orchestrator";
 import type { OrchestrationRequest, ProviderRunRequest, ProviderRunResult } from "../core/types";
 
 describe("orchestrator", () => {
@@ -25,6 +25,13 @@ describe("orchestrator", () => {
 
     assert.equal(seen.length, 2);
     assert.match(seen[1]?.prompt ?? "", /codex output/);
+  });
+
+  it("infers orchestration route from unified chat context", () => {
+    assert.equal(inferDispatchMode("全員で同時に比較して"), "parallel");
+    assert.equal(inferDispatchMode("Codexの後にClaudeへ順番に渡して"), "serial");
+    assert.equal(inferDispatchMode("実装後はGeminiへ引き継ぎ"), "handoff");
+    assert.equal(inferDispatchMode("仕様について相談したい"), "group");
   });
 });
 

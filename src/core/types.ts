@@ -2,14 +2,22 @@ export type ProviderId = "codex" | "claude" | "gemini";
 
 export type DispatchMode = "parallel" | "serial" | "group" | "handoff";
 
+export type ReasoningLevel = "low" | "medium" | "high" | "extra-high";
+
+export type ModelPermission = "ask-every-time" | "read-only" | "workspace-write" | "full-access";
+
 export interface ProviderDefinition {
   readonly id: ProviderId;
   readonly label: string;
   readonly shortLabel: string;
   readonly officialExtensionIds: readonly string[];
+  readonly authProviderIds: readonly string[];
   readonly commandCandidates: readonly string[];
   readonly defaultArgs: readonly string[];
   readonly docsUrl: string;
+  readonly loginUrl: string;
+  readonly modelOptions: readonly string[];
+  readonly defaultModel: string;
 }
 
 export interface ProviderHealth {
@@ -21,6 +29,35 @@ export interface ProviderHealth {
   readonly configuredCommand?: string;
   readonly ready: boolean;
   readonly notes: readonly string[];
+}
+
+export interface AgentRuntimeSettings {
+  readonly model: string;
+  readonly reasoningLevel: ReasoningLevel;
+  readonly permission: ModelPermission;
+}
+
+export interface ProviderUsageWindow {
+  readonly fiveHourRemainingPercent?: number;
+  readonly weeklyRemainingPercent?: number;
+  readonly fiveHourRefreshAt?: string;
+  readonly weeklyRefreshAt?: string;
+  readonly source: "provider" | "local" | "unavailable";
+}
+
+export interface ProviderControlState {
+  readonly id: ProviderId;
+  readonly label: string;
+  readonly shortLabel: string;
+  readonly linked: boolean;
+  readonly status: "ready" | "linked" | "setup";
+  readonly health: ProviderHealth;
+  readonly settings: AgentRuntimeSettings;
+  readonly usage: ProviderUsageWindow;
+  readonly modelOptions: readonly string[];
+  readonly loginUrl: string;
+  readonly docsUrl: string;
+  readonly webContextStatus: "available-through-provider" | "link-required";
 }
 
 export interface RuleDocument {

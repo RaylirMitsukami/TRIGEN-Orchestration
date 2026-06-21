@@ -5,6 +5,8 @@ src/**
 test/**
 node_modules/**
 .trigen/**
+AGENTS.md
+.TRIGEN-Rules
 tsconfig.json
 *.vsix
 dist/test/**

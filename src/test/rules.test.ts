@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { loadRuleBundle, renderRuleBundle } from "../core/rules";
+import { DEFAULT_RULE_FILE_NAMES, loadRuleBundle, renderRuleBundle } from "../core/rules";
 
 describe("rules", () => {
   let workspace: string;
@@ -28,6 +28,17 @@ describe("rules", () => {
     assert.equal(bundle.documents[1]?.path, path.join(".github", "copilot-instructions.md"));
     assert.match(renderRuleBundle(bundle), /alpha/);
     assert.match(renderRuleBundle(bundle), /beta/);
+  });
+
+  it("treats .TRIGEN-Rules as the default highest priority rule file", async () => {
+    await writeFile(path.join(workspace, ".TRIGEN-Rules"), "trigen priority", "utf8");
+    await writeFile(path.join(workspace, "AGENTS.md"), "agents fallback", "utf8");
+
+    const bundle = await loadRuleBundle(workspace, DEFAULT_RULE_FILE_NAMES, 1000);
+
+    assert.equal(DEFAULT_RULE_FILE_NAMES[0], ".TRIGEN-Rules");
+    assert.equal(bundle.documents[0]?.path, ".TRIGEN-Rules");
+    assert.equal(bundle.documents[1]?.path, "AGENTS.md");
   });
 
   it("rejects path traversal entries", async () => {

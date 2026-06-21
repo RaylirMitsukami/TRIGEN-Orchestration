@@ -29,6 +29,23 @@ export async function orchestrate(
   };
 }
 
+export function inferDispatchMode(userPrompt: string): DispatchMode {
+  const text = userPrompt.toLowerCase();
+  if (/(handoff|引き継|引継|任せ|委譲|handover|delegate)/i.test(userPrompt)) {
+    return "handoff";
+  }
+  if (/(serial|series|順番|順に|段階|逐次|レビュー後|確認してから)/i.test(userPrompt)) {
+    return "serial";
+  }
+  if (/(parallel|並列|同時|比較|それぞれ|全員|各自)/i.test(userPrompt)) {
+    return "parallel";
+  }
+  if (text.includes("group") || userPrompt.includes("会議") || userPrompt.includes("相談") || userPrompt.includes("合議")) {
+    return "group";
+  }
+  return "group";
+}
+
 export function buildProviderPrompt(
   providerId: ProviderId,
   mode: DispatchMode,
@@ -52,6 +69,10 @@ export function buildProviderPrompt(
     "## User Request",
     "",
     userPrompt,
+    "",
+    "## Account Context",
+    "",
+    "Use the provider-side subscription account, official extension settings, and provider memory when they are available in the provider runtime. TRIGEN does not duplicate provider memory; it routes this unified chat context into the provider runtime.",
     "",
     "## Workspace Rules",
     "",

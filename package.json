@@ -1,11 +1,12 @@
 {
   "name": "trigen-orchestration",
   "displayName": "TRIGEN-Orchestration",
-  "description": "A VS Code orchestration console for Codex, Claude, and Gemini coding agents.",
+  "description": "Codex、Claude、Geminiを1つの統合チャットで扱うVS Code用3エージェント・オーケストレーション拡張。",
   "version": "0.1.0",
   "publisher": "RaylirMitsukami",
   "license": "MIT",
   "private": false,
+  "icon": "media/trigen-logo-color.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/RaylirMitsukami/TRIGEN-Orchestration.git"
@@ -28,8 +29,12 @@
   "contributes": {
     "commands": [
       {
-        "command": "trigen.openConsole",
-        "title": "TRIGEN: Open Orchestration Console"
+        "command": "trigen.openSettings",
+        "title": "TRIGEN: Open Settings"
+      },
+      {
+        "command": "trigen.openIntegratedChat",
+        "title": "TRIGEN: Open Integrated Chat"
       },
       {
         "command": "trigen.runHealthCheck",
@@ -38,22 +43,6 @@
       {
         "command": "trigen.loadRules",
         "title": "TRIGEN: Reload Workspace Rules"
-      },
-      {
-        "command": "trigen.dispatchParallel",
-        "title": "TRIGEN: Dispatch Prompt in Parallel"
-      },
-      {
-        "command": "trigen.dispatchSerial",
-        "title": "TRIGEN: Dispatch Prompt in Series"
-      },
-      {
-        "command": "trigen.dispatchGroup",
-        "title": "TRIGEN: Start Group Round"
-      },
-      {
-        "command": "trigen.dispatchHandoff",
-        "title": "TRIGEN: Run Handoff Chain"
       }
     ],
     "configuration": {
@@ -62,6 +51,7 @@
         "trigen.rules.fileNames": {
           "type": "array",
           "default": [
+            ".TRIGEN-Rules",
             "AGENTS.md",
             "TRIGEN.md",
             "CLAUDE.md",
@@ -71,7 +61,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Workspace rule files loaded into every TRIGEN context bundle."
+          "description": "Workspace rule files loaded into every TRIGEN context bundle. .TRIGEN-Rules is loaded first and is treated as the preferred TRIGEN rule file."
         },
         "trigen.rules.maxBytes": {
           "type": "number",
@@ -144,20 +134,12 @@
         },
         "trigen.ui.defaultProviders": {
           "type": "array",
-          "default": [
-            "codex",
-            "claude",
-            "gemini"
-          ],
+          "default": ["codex", "claude", "gemini"],
           "items": {
             "type": "string",
-            "enum": [
-              "codex",
-              "claude",
-              "gemini"
-            ]
+            "enum": ["codex", "claude", "gemini"]
           },
-          "description": "Providers selected by default in the TRIGEN control center."
+          "description": "Providers used by the TRIGEN unified chat when no account link or runtime health signal is available."
         }
       }
     },
@@ -166,15 +148,29 @@
         {
           "id": "trigen",
           "title": "TRIGEN",
-          "icon": "media/trigen-icon.svg"
+          "icon": "media/trigen-mono.svg"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "trigenUnifiedChat",
+          "title": "TRIGEN",
+          "icon": "media/trigen-mono.svg"
         }
       ]
     },
     "views": {
       "trigen": [
         {
-          "id": "trigen.controlCenter",
-          "name": "Control Center",
+          "id": "trigen.settings",
+          "name": "TRIGEN-Orchestration",
+          "type": "webview"
+        }
+      ],
+      "trigenUnifiedChat": [
+        {
+          "id": "trigen.integratedChat",
+          "name": "3エージェント統合チャット / 3-Agent Unified Chat",
           "type": "webview"
         }
       ]

@@ -3,4 +3,8 @@
 ## 0.1.0
 
 - Initial TRIGEN-Orchestration VS Code extension scaffold.
-- Added provider health checks, workspace rule loading, orchestration modes, and Webview control center.
+- Added left-column `TRIGEN-Orchestration` settings view.
+- Added right-column `3-Agent Unified Chat` view.
+- Added Codex, Claude, and Gemini Login/Logout state, model, reasoning, permission, and token meter UI.
+- Added implicit route inference for serial, parallel, group chat, and autonomous handoff.
+- Added `.TRIGEN-Rules` as the highest-priority workspace rule file.

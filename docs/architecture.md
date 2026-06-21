@@ -1,43 +1,78 @@
-# Architecture
+# Architecture / アーキテクチャ
 
-TRIGEN-Orchestration is a VS Code extension that acts as a command router between the workspace and three coding agent surfaces: Codex, Claude, and Gemini.
+TRIGEN-Orchestrationは、VS Code内でCodex、Claude、Geminiを1つの統合チャットに集約する拡張機能です。
+TRIGEN-Orchestration is a VS Code extension that gathers Codex, Claude, and Gemini into one unified chat surface.
 
-## Core flow
+## Workbench Layout / 画面配置
 
-1. The user enters a task in the TRIGEN control center.
-2. TRIGEN loads workspace rule files.
-3. TRIGEN captures lightweight workspace context such as the active file, selection, and git status.
-4. TRIGEN builds a provider-specific prompt bundle.
-5. TRIGEN dispatches the prompt with the selected mode.
-6. Results are collected into the local transcript and the output channel.
+```mermaid
+flowchart LR
+  Activity["Left Activity Bar\nTRIGEN icon"] --> Settings["Left Side Bar\nTRIGEN-Orchestration settings"]
+  Secondary["Right Secondary Side Bar\nTRIGEN icon"] --> Chat["Right Side Bar\n3-Agent Unified Chat"]
+  Chat --> Controller["TRIGEN Controller"]
+  Settings --> Controller
+  Controller --> Rules["Workspace Rule Bundle\n.TRIGEN-Rules first"]
+  Controller --> Orchestrator["Implicit Route Orchestrator"]
+  Orchestrator --> Codex["Codex runtime"]
+  Orchestrator --> Claude["Claude runtime"]
+  Orchestrator --> Gemini["Gemini runtime"]
+```
 
-## Modules
+左カラムは設定専用です。右カラムは3エージェント統合チャット専用です。中央エディタ領域にはTRIGENチャットを出しません。
+The left column is only for settings. The right column is only for the 3-agent unified chat. TRIGEN chat does not open in the central editor.
 
-- `src/extension.ts`: VS Code activation, command registration, and controller wiring.
-- `src/core/providers.ts`: provider definitions, command resolution, variable expansion, and process runner.
-- `src/core/rules.ts`: rule file discovery and bounded reads.
-- `src/core/orchestrator.ts`: parallel, serial, group, and handoff execution.
-- `src/ui/controlCenter.ts`: Webview UI and message bridge.
+## Core Flow / 基本フロー
 
-## Provider adapters
+1. ユーザーが右カラムの統合チャットへ依頼を書きます。
+   The user enters a request in the right-column unified chat.
+2. TRIGENは`.TRIGEN-Rules`を最優先に、ワークスペースルールを読み込みます。
+   TRIGEN loads workspace rules with `.TRIGEN-Rules` first.
+3. TRIGENはアクティブファイル、選択範囲、git statusを軽量スナップショットとして取得します。
+   TRIGEN captures active file, selected text, and git status as a lightweight snapshot.
+4. TRIGENはチャット文脈から内部実行経路を判定します。
+   TRIGEN infers an internal execution route from chat context.
+5. TRIGENはプロバイダー別プロンプトを作り、Codex、Claude、Geminiの実行面へ渡します。
+   TRIGEN builds provider-specific prompts and sends them to Codex, Claude, and Gemini runtimes.
+6. 結果は統合チャットに集約され、出力チャンネルにも記録されます。
+   Results are gathered into the unified chat and written to the output channel.
 
-Each provider adapter has a stable internal ID:
+## Internal Routes / 内部経路
 
-- `codex`
-- `claude`
-- `gemini`
+TRIGENには次の実行経路がありますが、UI上の明示モードボタンはありません。
+TRIGEN has the following routes, but the UI does not expose explicit mode buttons.
 
-Adapters are intentionally command-template based. This keeps TRIGEN usable across provider CLI changes without rewriting the extension. The default Codex adapter targets `codex exec --json`.
+- `parallel`: 複数エージェントへ同時送信。
+  Send to multiple agents at the same time.
+- `serial`: 前のエージェント出力を次へ渡す。
+  Feed each agent output into the next agent.
+- `group`: 単一ラウンドのグループ相談。
+  Run one group discussion round.
+- `handoff`: 自律的な引き継ぎチェーン。
+  Run an autonomous handoff chain.
 
-## Context bundle
+## Modules / モジュール
 
-The context bundle is explicit and auditable:
+- `src/extension.ts`: VS Code起動、ビュー登録、コントローラー、アカウント連携状態、設定保存。
+  VS Code activation, view registration, controller, account link state, and settings persistence.
+- `src/ui/controlCenter.ts`: 左設定ビューと右統合チャットビューのWebview実装。
+  Webview implementation for the left settings view and right unified chat view.
+- `src/core/providers.ts`: プロバイダー定義、公式拡張検出、CLI検出、実行。
+  Provider definitions, official extension detection, CLI detection, and execution.
+- `src/core/rules.ts`: `.TRIGEN-Rules`を先頭にしたルール読み込み。
+  Rule loading with `.TRIGEN-Rules` first.
+- `src/core/orchestrator.ts`: 暗黙モード判定と直列/並列/グループ/ハンドオフ実行。
+  Implicit mode inference and serial/parallel/group/handoff execution.
 
-- User request
-- Workspace folder
-- Rule file excerpts
-- Active editor file and selected text
-- Git status summary
-- Previous provider outputs when using serial or handoff mode
+## Context Bundle / コンテキスト束
+
+TRIGENが各プロバイダーへ渡す文脈は監査可能な文字列です。
+The context bundle sent to each provider is an auditable text bundle.
+
+- ユーザー依頼 / User request
+- 統合チャット方針 / Unified chat policy
+- エージェント設定 / Agent runtime settings
+- `.TRIGEN-Rules`を含むワークスペースルール / Workspace rules including `.TRIGEN-Rules`
+- アクティブファイル、選択テキスト、git status / Active file, selected text, and git status
+- 直列/ハンドオフ時の先行出力 / Prior output for serial or handoff routes
 
 Prompt artifacts are written under `.trigen/prompts/` when enabled.

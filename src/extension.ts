@@ -3,48 +3,55 @@ import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { ControlCenterProvider } from "./ui/controlCenter";
+import { SettingsViewProvider, UnifiedChatViewProvider, type IntegratedDispatchResult } from "./ui/controlCenter";
 import { expandArgs, getProviderDefinition, PROVIDERS, resolveExecutable, runProviderProcess } from "./core/providers";
-import { loadRuleBundle } from "./core/rules";
-import { buildProviderPrompt, orchestrate } from "./core/orchestrator";
+import { DEFAULT_RULE_FILE_NAMES, loadRuleBundle } from "./core/rules";
+import { buildProviderPrompt, inferDispatchMode, orchestrate } from "./core/orchestrator";
 import type {
+  AgentRuntimeSettings,
   DispatchMode,
+  ModelPermission,
   OrchestrationRequest,
   OrchestrationResult,
+  ProviderControlState,
   ProviderHealth,
   ProviderId,
   ProviderRunRequest,
   ProviderRunResult,
+  ProviderUsageWindow,
+  ReasoningLevel,
   RuleBundle,
   WorkspaceSnapshot
 } from "./core/types";
 
 const execFileAsync = promisify(execFile);
+const LINKED_PROVIDERS_KEY = "trigen.linkedProviders";
+const AGENT_SETTINGS_KEY = "trigen.agentSettings";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("TRIGEN-Orchestration");
-  const controller = new TrigenController(output);
-  const controlCenter = new ControlCenterProvider(context, controller);
+  const controller = new TrigenController(output, context);
+  const settingsView = new SettingsViewProvider(context, controller);
+  const unifiedChatView = new UnifiedChatViewProvider(context, controller);
 
   context.subscriptions.push(
     output,
-    vscode.window.registerWebviewViewProvider("trigen.controlCenter", controlCenter),
-    vscode.commands.registerCommand("trigen.openConsole", () => controlCenter.reveal()),
+    vscode.window.registerWebviewViewProvider("trigen.settings", settingsView),
+    vscode.window.registerWebviewViewProvider("trigen.integratedChat", unifiedChatView),
+    vscode.commands.registerCommand("trigen.openSettings", () => settingsView.reveal()),
+    vscode.commands.registerCommand("trigen.openIntegratedChat", () => unifiedChatView.reveal()),
+    vscode.commands.registerCommand("trigen.openConsole", () => unifiedChatView.reveal()),
     vscode.commands.registerCommand("trigen.runHealthCheck", async () => {
       const health = await controller.healthCheck();
       output.show(true);
       output.appendLine(JSON.stringify(health, null, 2));
-      await controlCenter.refreshHealth();
+      await settingsView.refresh("ヘルスチェック完了 / Health check complete.");
     }),
     vscode.commands.registerCommand("trigen.loadRules", async () => {
       const rules = await controller.loadRules();
       vscode.window.showInformationMessage(`TRIGEN loaded ${rules.documents.length} rule file(s).`);
-      await controlCenter.refreshRules();
-    }),
-    vscode.commands.registerCommand("trigen.dispatchParallel", () => promptAndDispatch(controlCenter, "parallel")),
-    vscode.commands.registerCommand("trigen.dispatchSerial", () => promptAndDispatch(controlCenter, "serial")),
-    vscode.commands.registerCommand("trigen.dispatchGroup", () => promptAndDispatch(controlCenter, "group")),
-    vscode.commands.registerCommand("trigen.dispatchHandoff", () => promptAndDispatch(controlCenter, "handoff"))
+      await settingsView.refresh("ルールを再読み込みしました / Rules reloaded.");
+    })
   );
 }
 
@@ -53,24 +60,84 @@ export function deactivate(): void {
 }
 
 class TrigenController {
-  constructor(private readonly output: vscode.OutputChannel) {}
+  constructor(
+    private readonly output: vscode.OutputChannel,
+    private readonly context: vscode.ExtensionContext
+  ) {}
 
   async healthCheck(): Promise<readonly ProviderHealth[]> {
     return await Promise.all(PROVIDERS.map((provider) => this.providerHealth(provider.id)));
   }
 
+  async getControlState(): Promise<readonly ProviderControlState[]> {
+    const health = await this.healthCheck();
+    const linked = this.linkedProviders();
+    const settings = this.agentSettings();
+
+    return PROVIDERS.map((provider) => {
+      const providerHealth = health.find((item) => item.id === provider.id);
+      if (!providerHealth) {
+        throw new Error(`Missing provider health for ${provider.id}`);
+      }
+      const providerSettings = normalizeSettings(provider.id, settings[provider.id]);
+      const isLinked = Boolean(linked[provider.id]);
+      return {
+        id: provider.id,
+        label: provider.label,
+        shortLabel: provider.shortLabel,
+        linked: isLinked,
+        status: providerHealth.ready ? "ready" : isLinked ? "linked" : "setup",
+        health: providerHealth,
+        settings: providerSettings,
+        usage: this.usageWindow(provider.id, isLinked),
+        modelOptions: provider.modelOptions,
+        loginUrl: provider.loginUrl,
+        docsUrl: provider.docsUrl,
+        webContextStatus: isLinked ? "available-through-provider" : "link-required"
+      };
+    });
+  }
+
+  async login(providerId: ProviderId): Promise<void> {
+    const provider = getProviderDefinition(providerId);
+    await vscode.env.openExternal(vscode.Uri.parse(provider.loginUrl));
+    await this.setLinked(providerId, true);
+  }
+
+  async logout(providerId: ProviderId): Promise<void> {
+    await this.setLinked(providerId, false);
+  }
+
+  async updateAgentSettings(providerId: ProviderId, settings: Partial<AgentRuntimeSettings>): Promise<void> {
+    const current = this.agentSettings();
+    const next = {
+      ...current,
+      [providerId]: normalizeSettings(providerId, {
+        ...current[providerId],
+        ...settings
+      })
+    };
+    await this.context.globalState.update(AGENT_SETTINGS_KEY, next);
+  }
+
   async loadRules(): Promise<RuleBundle> {
     const workspaceFolder = requireWorkspaceFolder();
     const config = vscode.workspace.getConfiguration("trigen");
-    const fileNames = config.get<string[]>("rules.fileNames", [
-      "AGENTS.md",
-      "TRIGEN.md",
-      "CLAUDE.md",
-      "GEMINI.md",
-      ".github/copilot-instructions.md"
-    ]);
+    const fileNames = config.get<string[]>("rules.fileNames", [...DEFAULT_RULE_FILE_NAMES]);
     const maxBytes = config.get<number>("rules.maxBytes", 120000);
     return await loadRuleBundle(workspaceFolder, fileNames, maxBytes);
+  }
+
+  async dispatchImplicit(prompt: string, attachments: readonly string[]): Promise<IntegratedDispatchResult> {
+    const mode = inferDispatchMode(prompt);
+    const providers = await this.providersForUnifiedChat();
+    const controlState = await this.getControlState();
+    const enrichedPrompt = enrichUnifiedPrompt(prompt, attachments, controlState);
+    const result = await this.dispatch(mode, providers, enrichedPrompt);
+    return {
+      ...result,
+      routeSummary: routeSummary(mode, providers)
+    };
   }
 
   async dispatch(mode: DispatchMode, providers: readonly ProviderId[], userPrompt: string): Promise<OrchestrationResult> {
@@ -103,8 +170,10 @@ class TrigenController {
     const cliPath = await resolveExecutable(commandCandidates);
     const extensionId = provider.officialExtensionIds.find((id) => vscode.extensions.getExtension(id));
     const notes: string[] = [];
+    const accountNotes = await this.authenticationNotes(provider.authProviderIds);
 
     notes.push(extensionId ? `Official extension detected: ${extensionId}` : "Official extension not detected.");
+    notes.push(...accountNotes);
     notes.push(cliPath ? `CLI detected: ${cliPath}` : `CLI not detected. Configure trigen.providers.${providerId}.command when installed.`);
 
     return {
@@ -117,6 +186,12 @@ class TrigenController {
       ready: Boolean(cliPath),
       notes
     };
+  }
+
+  private async providersForUnifiedChat(): Promise<readonly ProviderId[]> {
+    const state = await this.getControlState();
+    const linkedOrReady = state.filter((item) => item.linked || item.health.ready).map((item) => item.id);
+    return linkedOrReady.length > 0 ? linkedOrReady : PROVIDERS.map((provider) => provider.id);
   }
 
   private async runProvider(request: ProviderRunRequest): Promise<ProviderRunResult> {
@@ -183,16 +258,47 @@ class TrigenController {
       await writeFile(path.join(promptDir, `${providerId}-last.md`), prompt, "utf8");
     }));
   }
-}
 
-async function promptAndDispatch(controlCenter: ControlCenterProvider, mode: DispatchMode): Promise<void> {
-  const prompt = await vscode.window.showInputBox({
-    title: `TRIGEN ${mode}`,
-    prompt: "Task for selected providers",
-    ignoreFocusOut: true
-  });
-  if (prompt) {
-    await controlCenter.dispatchFromCommand(mode, prompt);
+  private linkedProviders(): Partial<Record<ProviderId, boolean>> {
+    return this.context.globalState.get<Partial<Record<ProviderId, boolean>>>(LINKED_PROVIDERS_KEY, {});
+  }
+
+  private async setLinked(providerId: ProviderId, linked: boolean): Promise<void> {
+    const current = this.linkedProviders();
+    await this.context.globalState.update(LINKED_PROVIDERS_KEY, {
+      ...current,
+      [providerId]: linked
+    });
+  }
+
+  private agentSettings(): Partial<Record<ProviderId, Partial<AgentRuntimeSettings>>> {
+    return this.context.globalState.get<Partial<Record<ProviderId, Partial<AgentRuntimeSettings>>>>(AGENT_SETTINGS_KEY, {});
+  }
+
+  private usageWindow(_providerId: ProviderId, linked: boolean): ProviderUsageWindow {
+    if (!linked) {
+      return { source: "unavailable" };
+    }
+    return {
+      source: "unavailable",
+      fiveHourRefreshAt: "Provider reported time unavailable",
+      weeklyRefreshAt: "Provider reported time unavailable"
+    };
+  }
+
+  private async authenticationNotes(authProviderIds: readonly string[]): Promise<readonly string[]> {
+    const notes: string[] = [];
+    for (const authProviderId of authProviderIds) {
+      try {
+        const accounts = await vscode.authentication.getAccounts(authProviderId);
+        if (accounts.length > 0) {
+          notes.push(`Authentication account detected via ${authProviderId}: ${accounts.length}`);
+        }
+      } catch {
+        // Most providers do not expose a stable VS Code Authentication provider.
+      }
+    }
+    return notes;
   }
 }
 
@@ -202,6 +308,70 @@ function requireWorkspaceFolder(): string {
     throw new Error("Open a workspace folder before using TRIGEN-Orchestration.");
   }
   return folder.uri.fsPath;
+}
+
+function normalizeSettings(providerId: ProviderId, value: Partial<AgentRuntimeSettings> | undefined): AgentRuntimeSettings {
+  const provider = getProviderDefinition(providerId);
+  const model = value?.model && provider.modelOptions.includes(value.model)
+    ? value.model
+    : provider.defaultModel;
+  return {
+    model,
+    reasoningLevel: isReasoningLevel(value?.reasoningLevel) ? value.reasoningLevel : "high",
+    permission: isModelPermission(value?.permission) ? value.permission : "ask-every-time"
+  };
+}
+
+function isReasoningLevel(value: unknown): value is ReasoningLevel {
+  return value === "low" || value === "medium" || value === "high" || value === "extra-high";
+}
+
+function isModelPermission(value: unknown): value is ModelPermission {
+  return value === "ask-every-time" || value === "read-only" || value === "workspace-write" || value === "full-access";
+}
+
+function enrichUnifiedPrompt(
+  prompt: string,
+  attachments: readonly string[],
+  providers: readonly ProviderControlState[]
+): string {
+  const lines = [
+    prompt,
+    "",
+    "## TRIGEN Unified Chat Policy",
+    "",
+    "- This request comes from the single TRIGEN 3-agent unified chat window.",
+    "- Do not assume a separate per-agent chat context.",
+    "- Use only this unified chat context plus the workspace rule bundle as the shared context.",
+    "- Provider-side subscription account settings and memory should be respected through the provider runtime when available.",
+    "",
+    "## Agent Runtime Selection",
+    "",
+    ...providers.map((provider) => `- ${provider.shortLabel}: model=${provider.settings.model}; reasoning=${provider.settings.reasoningLevel}; permission=${provider.settings.permission}; linked=${provider.linked}`)
+  ];
+
+  if (attachments.length > 0) {
+    lines.push("", "## User Attachments", "", ...attachments.map((item) => `- ${item}`));
+  }
+
+  return lines.join("\n");
+}
+
+function routeSummary(mode: DispatchMode, providers: readonly ProviderId[]): string {
+  const labels = providers.map((providerId) => getProviderDefinition(providerId).shortLabel).join(" / ");
+  const modeLabel = mode === "parallel"
+    ? "並列 / Parallel"
+    : mode === "serial"
+      ? "直列 / Serial"
+      : mode === "handoff"
+        ? "自律型ハンドオフ / Autonomous handoff"
+        : "グループチャット / Group chat";
+  return [
+    `文脈から内部処理経路を選択しました: ${modeLabel}`,
+    `Internal route selected from context: ${modeLabel}`,
+    "",
+    `対象エージェント / Target agents: ${labels}`
+  ].join("\n");
 }
 
 async function getGitStatus(workspaceFolder: string): Promise<string | undefined> {
