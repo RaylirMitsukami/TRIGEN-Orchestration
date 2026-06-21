@@ -25,8 +25,8 @@ The right-column chat composer has a top message input, a lower-left `+` attachm
 ワークスペースrepo内に`.TRIGEN-Rules`を置くと、TRIGENはそれを3エージェント連携の最優先ルールとして読み込みます。
 If `.TRIGEN-Rules` exists in the workspace repository, TRIGEN loads it as the highest-priority rule file for 3-agent orchestration.
 
-TRIGENは、各プロバイダーの公式アカウント、公式拡張機能、公式ランタイムの境界を尊重します。パスワード、Cookie、他拡張機能のSecret Storageを読みません。
-TRIGEN respects provider boundaries for official accounts, official extensions, and official runtimes. It does not read passwords, cookies, or another extension's Secret Storage.
+TRIGENは、各プロバイダーの公式アカウントと公式ランタイムの境界を尊重します。パスワード、Cookie、他拡張機能のSecret Storageを読みません。
+TRIGEN respects provider boundaries for official accounts and official runtimes. It does not read passwords, cookies, or another extension's Secret Storage.
 
 ## Feature List / 機能一覧
 

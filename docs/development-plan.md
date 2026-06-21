@@ -6,8 +6,8 @@
   Build, test, and package the project as a VS Code extension.
 - Codex、Claude、Geminiのプロバイダー定義を持つ。
   Define Codex, Claude, and Gemini providers.
-- 公式拡張機能とCLIの検出を行う。
-  Detect official extensions and CLIs.
+- 公式拡張機能が必要なプロバイダーは拡張機能を検出し、Geminiなど拡張機能不要の経路はCLI/公式Webアカウント導線を使う。
+  Detect official extensions only where a provider needs them, and use CLI/official web-account paths for providers such as Gemini that do not require one.
 
 Status: complete.
 

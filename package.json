@@ -2,7 +2,7 @@
   "name": "trigen-orchestration",
   "displayName": "TRIGEN-Orchestration",
   "description": "Codex、Claude、Geminiを1つの統合チャットで扱うVS Code用3エージェント・オーケストレーション拡張。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "RaylirMitsukami",
   "license": "MIT",
   "private": false,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Repackaged the refined TRIGEN UI and rules implementation as a distinct installable version so VS Code cannot keep showing the stale 0.1.0 extension.
+
 ## 0.1.0
 
 - Initial TRIGEN-Orchestration VS Code extension scaffold.

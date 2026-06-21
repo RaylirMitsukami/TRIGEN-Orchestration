@@ -33,8 +33,8 @@ TRIGEN-Orchestration is a VS Code extension that respects the official usage mod
 
 ## Account Settings and Memory / アカウント設定とメモリ
 
-プロバイダー側のWeb版設定やメモリは、公式拡張機能や公式ランタイムが利用可能な範囲で使用されます。TRIGENはそれらを直接盗み読むのではなく、各エージェントの公式実行面に統合チャット文脈を渡します。
-Provider-side web settings and memory are used only to the extent that the official extension or runtime can use them. TRIGEN does not directly read them; it routes unified chat context into the provider's official runtime.
+プロバイダー側のWeb版設定やメモリは、公式実行面が利用可能な範囲で使用されます。TRIGENはそれらを直接盗み読むのではなく、各エージェントの公式実行面に統合チャット文脈を渡します。
+Provider-side web settings and memory are used only to the extent that the official runtime can use them. TRIGEN does not directly read them; it routes unified chat context into the provider's official runtime.
 
 ## Token Meters / トークンメーター
 
@@ -43,8 +43,8 @@ Provider-side web settings and memory are used only to the extent that the offic
 
 ## Reliable Integration Path / 安定した連携手順
 
-1. 公式Webまたは公式拡張機能で各プロバイダーへログインします。
-   Sign in to each provider through the official web or extension surface.
+1. 公式Web、公式CLI、または必要な場合だけ公式拡張機能で各プロバイダーへログインします。
+   Sign in to each provider through the official web, CLI, or extension surface only where needed.
 2. 各プロバイダー単体で動作確認します。
    Confirm each provider works by itself.
 3. TRIGENの左設定ビューでLoginとモデル設定を行います。

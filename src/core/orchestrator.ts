@@ -72,7 +72,7 @@ export function buildProviderPrompt(
     "",
     "## Account Context",
     "",
-    "Use the provider-side subscription account, official extension settings, and provider memory when they are available in the provider runtime. TRIGEN does not duplicate provider memory; it routes this unified chat context into the provider runtime.",
+    "Use the provider-side subscription account, official settings, and provider memory when they are available in the provider runtime. TRIGEN does not duplicate provider memory; it routes this unified chat context into the provider runtime.",
     "",
     "## Workspace Rules",
     "",
