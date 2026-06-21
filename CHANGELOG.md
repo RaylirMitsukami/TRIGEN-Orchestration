@@ -8,3 +8,6 @@
 - Added Codex, Claude, and Gemini Login/Logout state, model, reasoning, permission, and token meter UI.
 - Added implicit route inference for serial, parallel, group chat, and autonomous handoff.
 - Added `.TRIGEN-Rules` as the highest-priority workspace rule file.
+- Added `.TRIGEN-Rules` generation, agent display name/color parsing, and the requested workspace rule load order.
+- Added compact agent settings, model-specific reasoning/permission choices, and colored 5-hour/weekly token meters.
+- Added thread-based unified chat with rename, Markdown export, per-message timestamps, and copy buttons.

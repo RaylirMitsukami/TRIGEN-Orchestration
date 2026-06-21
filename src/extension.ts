@@ -1,11 +1,18 @@
 import * as vscode from "vscode";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { SettingsViewProvider, UnifiedChatViewProvider, type IntegratedDispatchResult } from "./ui/controlCenter";
-import { expandArgs, getProviderDefinition, PROVIDERS, resolveExecutable, runProviderProcess } from "./core/providers";
-import { DEFAULT_RULE_FILE_NAMES, loadRuleBundle } from "./core/rules";
+import { expandArgs, getModelProfile, getProviderDefinition, PROVIDERS, resolveExecutable, runProviderProcess } from "./core/providers";
+import {
+  DEFAULT_RULE_FILE_NAMES,
+  DEFAULT_TRIGEN_DISPLAY_CONFIG,
+  DEFAULT_TRIGEN_RULES_TEMPLATE,
+  loadRuleBundle,
+  parseTrigenDisplayConfig,
+  TRIGEN_RULES_FILE_NAME
+} from "./core/rules";
 import { buildProviderPrompt, inferDispatchMode, orchestrate } from "./core/orchestrator";
 import type {
   AgentRuntimeSettings,
@@ -21,6 +28,8 @@ import type {
   ProviderUsageWindow,
   ReasoningLevel,
   RuleBundle,
+  TrigenDisplayConfig,
+  TrigenRulesStatus,
   WorkspaceSnapshot
 } from "./core/types";
 
@@ -90,7 +99,9 @@ class TrigenController {
         health: providerHealth,
         settings: providerSettings,
         usage: this.usageWindow(provider.id, isLinked),
-        modelOptions: provider.modelOptions,
+        modelOptions: provider.modelOptions.map((item) => item.name),
+        reasoningOptions: getModelProfile(provider.id, providerSettings.model).reasoningLevels,
+        permissionOptions: getModelProfile(provider.id, providerSettings.model).permissions,
         loginUrl: provider.loginUrl,
         docsUrl: provider.docsUrl,
         webContextStatus: isLinked ? "available-through-provider" : "link-required"
@@ -126,6 +137,36 @@ class TrigenController {
     const fileNames = config.get<string[]>("rules.fileNames", [...DEFAULT_RULE_FILE_NAMES]);
     const maxBytes = config.get<number>("rules.maxBytes", 120000);
     return await loadRuleBundle(workspaceFolder, fileNames, maxBytes);
+  }
+
+  async getTrigenRulesStatus(): Promise<TrigenRulesStatus> {
+    const workspaceFolder = requireWorkspaceFolder();
+    const filePath = path.join(workspaceFolder, TRIGEN_RULES_FILE_NAME);
+    return {
+      workspaceFolder,
+      path: filePath,
+      exists: await fileExists(filePath)
+    };
+  }
+
+  async createTrigenRules(): Promise<TrigenRulesStatus> {
+    const status = await this.getTrigenRulesStatus();
+    if (!status.exists) {
+      await writeFile(status.path, DEFAULT_TRIGEN_RULES_TEMPLATE, { encoding: "utf8", flag: "wx" });
+    }
+    return await this.getTrigenRulesStatus();
+  }
+
+  async getDisplayConfig(): Promise<TrigenDisplayConfig> {
+    const status = await this.getTrigenRulesStatus();
+    if (!status.exists) {
+      return DEFAULT_TRIGEN_DISPLAY_CONFIG;
+    }
+    try {
+      return parseTrigenDisplayConfig(await readFile(status.path, "utf8"));
+    } catch {
+      return DEFAULT_TRIGEN_DISPLAY_CONFIG;
+    }
   }
 
   async dispatchImplicit(prompt: string, attachments: readonly string[]): Promise<IntegratedDispatchResult> {
@@ -172,7 +213,11 @@ class TrigenController {
     const notes: string[] = [];
     const accountNotes = await this.authenticationNotes(provider.authProviderIds);
 
-    notes.push(extensionId ? `Official extension detected: ${extensionId}` : "Official extension not detected.");
+    if (provider.officialExtensionIds.length > 0) {
+      notes.push(extensionId ? `Official extension detected: ${extensionId}` : "Official extension not detected.");
+    } else {
+      notes.push("Official VS Code extension is not required for this provider path.");
+    }
     notes.push(...accountNotes);
     notes.push(cliPath ? `CLI detected: ${cliPath}` : `CLI not detected. Configure trigen.providers.${providerId}.command when installed.`);
 
@@ -312,18 +357,24 @@ function requireWorkspaceFolder(): string {
 
 function normalizeSettings(providerId: ProviderId, value: Partial<AgentRuntimeSettings> | undefined): AgentRuntimeSettings {
   const provider = getProviderDefinition(providerId);
-  const model = value?.model && provider.modelOptions.includes(value.model)
+  const modelNames = provider.modelOptions.map((item) => item.name);
+  const model = value?.model && modelNames.includes(value.model)
     ? value.model
     : provider.defaultModel;
+  const modelProfile = getModelProfile(providerId, model);
   return {
     model,
-    reasoningLevel: isReasoningLevel(value?.reasoningLevel) ? value.reasoningLevel : "high",
-    permission: isModelPermission(value?.permission) ? value.permission : "ask-every-time"
+    reasoningLevel: isReasoningLevel(value?.reasoningLevel) && modelProfile.reasoningLevels.includes(value.reasoningLevel)
+      ? value.reasoningLevel
+      : modelProfile.defaultReasoningLevel,
+    permission: isModelPermission(value?.permission) && modelProfile.permissions.includes(value.permission)
+      ? value.permission
+      : modelProfile.defaultPermission
   };
 }
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
-  return value === "low" || value === "medium" || value === "high" || value === "extra-high";
+  return value === "low" || value === "medium" || value === "high" || value === "extra-high" || value === "max";
 }
 
 function isModelPermission(value: unknown): value is ModelPermission {
@@ -355,6 +406,15 @@ function enrichUnifiedPrompt(
   }
 
   return lines.join("\n");
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function routeSummary(mode: DispatchMode, providers: readonly ProviderId[]): string {

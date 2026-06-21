@@ -7,6 +7,7 @@ node_modules/**
 .trigen/**
 AGENTS.md
 .TRIGEN-Rules
+LOGO_GUIDELINES.md
 tsconfig.json
 *.vsix
 dist/test/**

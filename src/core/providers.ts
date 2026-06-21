@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ProviderDefinition, ProviderId, ProviderRunRequest, ProviderRunResult } from "./types";
+import type { ProviderDefinition, ProviderId, ProviderModelProfile, ProviderRunRequest, ProviderRunResult } from "./types";
 
 export const PROVIDERS: readonly ProviderDefinition[] = [
   {
@@ -19,7 +19,11 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
     defaultArgs: ["exec", "--json", "--skip-git-repo-check", "-C", "${workspaceFolder}", "-"],
     docsUrl: "https://developers.openai.com/codex/ide",
     loginUrl: "https://chatgpt.com/",
-    modelOptions: ["GPT-5.5", "GPT-5.4", "GPT-5.4 Mini"],
+    modelOptions: [
+      modelProfile("GPT-5.5", ["low", "medium", "high", "extra-high", "max"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
+      modelProfile("GPT-5.4", ["low", "medium", "high", "extra-high"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
+      modelProfile("GPT-5.4 Mini", ["low", "medium", "high"], ["ask-every-time", "read-only", "workspace-write"], "medium", "ask-every-time")
+    ],
     defaultModel: "GPT-5.5"
   },
   {
@@ -32,20 +36,28 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
     defaultArgs: ["-p", "-"],
     docsUrl: "https://code.claude.com/docs/en/vs-code",
     loginUrl: "https://claude.ai/login",
-    modelOptions: ["Opus 4.8", "Sonnet 4.5", "Haiku 4.5"],
+    modelOptions: [
+      modelProfile("Opus 4.8", ["low", "medium", "high", "extra-high", "max"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
+      modelProfile("Sonnet 4.6", ["low", "medium", "high", "max"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
+      modelProfile("Haiku 4.5", ["low", "medium", "high"], ["ask-every-time", "read-only", "workspace-write"], "medium", "ask-every-time")
+    ],
     defaultModel: "Opus 4.8"
   },
   {
     id: "gemini",
-    label: "Gemini Code Assist",
+    label: "Gemini",
     shortLabel: "Gemini",
-    officialExtensionIds: ["Google.geminicodeassist", "google.geminicodeassist"],
+    officialExtensionIds: [],
     authProviderIds: ["google"],
     commandCandidates: ["gemini"],
     defaultArgs: ["-p", "-"],
-    docsUrl: "https://docs.cloud.google.com/gemini/docs/codeassist/set-up-gemini",
+    docsUrl: "https://gemini.google.com/",
     loginUrl: "https://gemini.google.com/",
-    modelOptions: ["Gemini 3.1 Pro", "Gemini 3.1 Flash", "Gemini 2.5 Pro"],
+    modelOptions: [
+      modelProfile("Gemini 3.1 Pro", ["low", "medium", "high", "extra-high"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
+      modelProfile("Gemini 3.1 Flash", ["low", "medium", "high"], ["ask-every-time", "read-only", "workspace-write"], "medium", "ask-every-time"),
+      modelProfile("Gemini 2.5 Pro", ["low", "medium", "high", "extra-high"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time")
+    ],
     defaultModel: "Gemini 3.1 Pro"
   }
 ];
@@ -56,6 +68,29 @@ export function getProviderDefinition(providerId: ProviderId): ProviderDefinitio
     throw new Error(`Unknown provider: ${providerId}`);
   }
   return provider;
+}
+
+export function getModelProfile(providerId: ProviderId, modelName: string): ProviderModelProfile {
+  const provider = getProviderDefinition(providerId);
+  return provider.modelOptions.find((item) => item.name === modelName)
+    ?? provider.modelOptions.find((item) => item.name === provider.defaultModel)
+    ?? provider.modelOptions[0];
+}
+
+function modelProfile(
+  name: string,
+  reasoningLevels: ProviderModelProfile["reasoningLevels"],
+  permissions: ProviderModelProfile["permissions"],
+  defaultReasoningLevel: ProviderModelProfile["defaultReasoningLevel"],
+  defaultPermission: ProviderModelProfile["defaultPermission"]
+): ProviderModelProfile {
+  return {
+    name,
+    reasoningLevels,
+    permissions,
+    defaultReasoningLevel,
+    defaultPermission
+  };
 }
 
 export async function resolveExecutable(candidates: readonly string[], envPath = process.env.PATH ?? ""): Promise<string | undefined> {

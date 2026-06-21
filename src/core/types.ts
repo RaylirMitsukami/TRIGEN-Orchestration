@@ -2,9 +2,17 @@ export type ProviderId = "codex" | "claude" | "gemini";
 
 export type DispatchMode = "parallel" | "serial" | "group" | "handoff";
 
-export type ReasoningLevel = "low" | "medium" | "high" | "extra-high";
+export type ReasoningLevel = "low" | "medium" | "high" | "extra-high" | "max";
 
 export type ModelPermission = "ask-every-time" | "read-only" | "workspace-write" | "full-access";
+
+export interface ProviderModelProfile {
+  readonly name: string;
+  readonly reasoningLevels: readonly ReasoningLevel[];
+  readonly permissions: readonly ModelPermission[];
+  readonly defaultReasoningLevel: ReasoningLevel;
+  readonly defaultPermission: ModelPermission;
+}
 
 export interface ProviderDefinition {
   readonly id: ProviderId;
@@ -16,7 +24,7 @@ export interface ProviderDefinition {
   readonly defaultArgs: readonly string[];
   readonly docsUrl: string;
   readonly loginUrl: string;
-  readonly modelOptions: readonly string[];
+  readonly modelOptions: readonly ProviderModelProfile[];
   readonly defaultModel: string;
 }
 
@@ -55,9 +63,17 @@ export interface ProviderControlState {
   readonly settings: AgentRuntimeSettings;
   readonly usage: ProviderUsageWindow;
   readonly modelOptions: readonly string[];
+  readonly reasoningOptions: readonly ReasoningLevel[];
+  readonly permissionOptions: readonly ModelPermission[];
   readonly loginUrl: string;
   readonly docsUrl: string;
   readonly webContextStatus: "available-through-provider" | "link-required";
+}
+
+export interface TrigenRulesStatus {
+  readonly workspaceFolder: string;
+  readonly path: string;
+  readonly exists: boolean;
 }
 
 export interface RuleDocument {
@@ -72,6 +88,13 @@ export interface RuleBundle {
   readonly totalBytes: number;
   readonly maxBytes: number;
 }
+
+export interface TrigenAgentDisplay {
+  readonly name: string;
+  readonly color: string;
+}
+
+export type TrigenDisplayConfig = Record<ProviderId, TrigenAgentDisplay>;
 
 export interface WorkspaceSnapshot {
   readonly workspaceFolder: string;

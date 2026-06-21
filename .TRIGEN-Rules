@@ -1,10 +1,21 @@
-# TRIGEN-Orchestration Workspace Rules
+[ TRIGEN-Orchestration Rules ]
 
+1. Agents Name :
+Codex : [ Codex ]
+Claude : [ Claude ]
+Gemini : [ Gemini ]
+
+2. Agents Color :
+Codex : [ #ffffff ]
+Claude : [ #ffffff ]
+Gemini : [ #ffffff ]
+
+3. TRIGEN-Orchestration Rules :
 - Treat this repository as a standalone public VS Code extension project.
 - Do not import REI:FA, PROJECT_REI, or private research assumptions into this project.
 - Prefer Japanese UI copy first, with concise English copy directly below it.
-- Keep the left TRIGEN view focused on agent settings only.
-- Keep the right TRIGEN view focused on the 3-agent unified chat only.
+- Keep the left TRIGEN view focused on compact agent settings and workspace rule setup.
+- Keep the right TRIGEN view focused on thread-based 3-agent unified chat only.
 - Do not restore dedicated per-agent chat windows.
 - Do not expose explicit orchestration mode buttons in the UI; infer the internal route from unified chat context.
 - Respect provider boundaries: do not scrape provider webviews, credentials, cookies, or another extension's secret storage.

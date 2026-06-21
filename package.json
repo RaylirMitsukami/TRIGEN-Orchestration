@@ -52,8 +52,9 @@
           "type": "array",
           "default": [
             ".TRIGEN-Rules",
-            "AGENTS.md",
             "TRIGEN.md",
+            "AGENTS.md",
+            "CODEX.md",
             "CLAUDE.md",
             "GEMINI.md",
             ".github/copilot-instructions.md"

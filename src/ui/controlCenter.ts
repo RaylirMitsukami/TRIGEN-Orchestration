@@ -1,15 +1,21 @@
+import { writeFile } from "node:fs/promises";
+import * as path from "node:path";
 import * as vscode from "vscode";
+import { DEFAULT_TRIGEN_DISPLAY_CONFIG } from "../core/rules";
 import type {
   AgentRuntimeSettings,
-  DispatchMode,
   ModelPermission,
   OrchestrationResult,
   ProviderControlState,
   ProviderHealth,
   ProviderId,
   ReasoningLevel,
-  RuleBundle
+  RuleBundle,
+  TrigenDisplayConfig,
+  TrigenRulesStatus
 } from "../core/types";
+
+const CHAT_THREADS_KEY = "trigen.chatThreads";
 
 export interface IntegratedDispatchResult extends OrchestrationResult {
   readonly routeSummary: string;
@@ -17,6 +23,9 @@ export interface IntegratedDispatchResult extends OrchestrationResult {
 
 export interface TrigenViewDelegate {
   getControlState(): Promise<readonly ProviderControlState[]>;
+  getTrigenRulesStatus(): Promise<TrigenRulesStatus>;
+  createTrigenRules(): Promise<TrigenRulesStatus>;
+  getDisplayConfig(): Promise<TrigenDisplayConfig>;
   healthCheck(): Promise<readonly ProviderHealth[]>;
   loadRules(): Promise<RuleBundle>;
   login(providerId: ProviderId): Promise<void>;
@@ -26,22 +35,34 @@ export interface TrigenViewDelegate {
 }
 
 interface SettingsViewState {
-  providers: readonly ProviderControlState[];
-  busy: boolean;
-  message?: string;
+  readonly providers: readonly ProviderControlState[];
+  readonly ruleStatus?: TrigenRulesStatus;
+  readonly busy: boolean;
+  readonly message?: string;
 }
 
 interface ChatMessage {
+  readonly id: string;
   readonly role: "user" | "trigen" | "agent" | "system";
   readonly text: string;
   readonly timestamp: string;
   readonly providerId?: ProviderId;
 }
 
-interface ChatViewState {
+interface ChatThread {
+  readonly id: string;
+  readonly title: string;
   readonly messages: readonly ChatMessage[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+interface ChatViewState {
+  readonly threads: readonly ChatThread[];
+  readonly activeThreadId?: string;
   readonly attachments: readonly string[];
   readonly busy: boolean;
+  readonly displayConfig: TrigenDisplayConfig;
   readonly message?: string;
 }
 
@@ -77,8 +98,13 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
   async refresh(message = "更新しました / Refreshed."): Promise<void> {
     this.setBusy(true, message);
     try {
+      const [providers, ruleStatus] = await Promise.all([
+        this.delegate.getControlState(),
+        this.delegate.getTrigenRulesStatus()
+      ]);
       this.state = {
-        providers: await this.delegate.getControlState(),
+        providers,
+        ruleStatus,
         busy: false,
         message
       };
@@ -100,6 +126,13 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
 
     if (message.type === "refresh") {
       await this.refresh("状態を更新しました / Status refreshed.");
+      return;
+    }
+
+    if (message.type === "createRules") {
+      this.setBusy(true, ".TRIGEN-Rulesを作成しています / Creating .TRIGEN-Rules...");
+      await this.delegate.createTrigenRules();
+      await this.refresh(".TRIGEN-Rulesを作成しました / .TRIGEN-Rules created.");
       return;
     }
 
@@ -167,90 +200,95 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       --input: var(--vscode-input-background);
       --inputText: var(--vscode-input-foreground);
       --ok: #40c6a3;
+      --five: var(--vscode-charts-blue, #4fc1ff);
+      --weekly: #40c6a3;
       --warn: #d8a657;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 12px;
+      padding: 8px;
       background: var(--bg);
       color: var(--text);
-      font: 12px/1.45 var(--vscode-font-family);
+      font: 11px/1.35 var(--vscode-font-family);
     }
     header {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 10px;
+      gap: 6px;
+      margin-bottom: 6px;
     }
     h1 {
       margin: 0;
-      font-size: 15px;
-      line-height: 1.2;
+      font-size: 13px;
+      line-height: 1.15;
       font-weight: 700;
       letter-spacing: 0;
     }
-    .en {
-      display: block;
+    .en,
+    .enInline {
       color: var(--muted);
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 400;
-      margin-top: 2px;
     }
     .statusLine {
       color: var(--muted);
-      min-height: 18px;
-      margin: 4px 0 10px;
+      min-height: 15px;
+      margin: 2px 0 6px;
     }
     .agents {
       display: grid;
-      gap: 8px;
+      gap: 6px;
     }
     .agent {
       border: 1px solid var(--border);
       background: var(--panel);
-      border-radius: 8px;
-      padding: 10px;
+      border-radius: 7px;
+      padding: 7px;
     }
     .agentTop {
       display: grid;
       grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: start;
-      margin-bottom: 8px;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 6px;
     }
     .agentName {
-      font-size: 13px;
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      min-width: 0;
+      font-size: 12px;
       font-weight: 700;
     }
     .agentActions {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       align-items: center;
     }
     .pill {
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 2px 7px;
+      padding: 1px 6px;
       color: var(--muted);
-      font-size: 11px;
-      line-height: 1.4;
+      font-size: 10px;
+      line-height: 1.5;
       white-space: nowrap;
     }
-    .pill.ready { color: var(--ok); }
+    .pill.ready,
     .pill.linked { color: var(--ok); }
     .pill.setup { color: var(--warn); }
     button, select {
-      font: 12px var(--vscode-font-family);
+      font: 11px var(--vscode-font-family);
     }
     button {
       border: 0;
-      border-radius: 6px;
+      border-radius: 5px;
       background: var(--button2);
       color: var(--button2Text);
-      padding: 5px 8px;
-      min-height: 26px;
+      padding: 4px 7px;
+      min-height: 24px;
       cursor: pointer;
     }
     button.primary {
@@ -258,48 +296,78 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       color: var(--accentText);
     }
     button:disabled, select:disabled {
-      opacity: 0.55;
+      opacity: 0.45;
       cursor: default;
     }
     .fields {
       display: grid;
-      gap: 7px;
+      gap: 5px;
     }
     label {
       display: grid;
-      gap: 3px;
+      grid-template-columns: minmax(92px, 38%) 1fr;
+      gap: 6px;
+      align-items: center;
       color: var(--text);
       font-weight: 600;
     }
+    .labelText {
+      display: flex;
+      gap: 4px;
+      align-items: baseline;
+      min-width: 0;
+      white-space: nowrap;
+    }
     select {
       width: 100%;
+      min-width: 0;
       color: var(--inputText);
       background: var(--input);
       border: 1px solid var(--vscode-input-border, var(--border));
-      border-radius: 6px;
-      padding: 5px 6px;
+      border-radius: 5px;
+      padding: 4px 5px;
     }
     .meters {
       display: grid;
-      gap: 7px;
-      margin-top: 8px;
+      gap: 5px;
+      margin-top: 6px;
     }
     .meterTop {
       display: flex;
       justify-content: space-between;
-      gap: 6px;
+      gap: 5px;
       color: var(--muted);
-      font-size: 11px;
+      font-size: 10px;
     }
     progress {
       width: 100%;
       height: 7px;
-      accent-color: var(--ok);
+      border-radius: 999px;
     }
+    progress.five { accent-color: var(--five); }
+    progress.weekly { accent-color: var(--weekly); }
     .context {
       color: var(--muted);
-      margin-top: 8px;
-      font-size: 11px;
+      margin-top: 6px;
+      font-size: 10px;
+    }
+    .rulesBox {
+      margin-top: 9px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      display: grid;
+      gap: 5px;
+    }
+    .rulesActions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .small {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.35;
     }
     .refresh {
       white-space: nowrap;
@@ -308,19 +376,31 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <header>
-    <h1>TRIGEN-Orchestration<span class="en">Agent account settings</span></h1>
-    <button id="refresh" class="refresh">更新<span class="en">Refresh</span></button>
+    <h1>TRIGEN-Orchestration</h1>
+    <button id="refresh" class="refresh">更新 <span class="enInline">Refresh</span></button>
   </header>
   <div id="status" class="statusLine"></div>
   <div id="agents" class="agents"></div>
+  <section class="rulesBox">
+    <div class="rulesActions">
+      <strong>.TRIGEN-Rules</strong>
+      <button id="createRules">自動生成 <span class="enInline">Generate</span></button>
+    </div>
+    <div id="rulesHelp" class="small"></div>
+  </section>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     let state = { providers: [], busy: false };
     const statusEl = document.getElementById('status');
     const agentsEl = document.getElementById('agents');
+    const createRulesButton = document.getElementById('createRules');
+    const rulesHelpEl = document.getElementById('rulesHelp');
 
     document.getElementById('refresh').addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh' });
+    });
+    createRulesButton.addEventListener('click', () => {
+      vscode.postMessage({ type: 'createRules' });
     });
 
     window.addEventListener('message', event => {
@@ -338,9 +418,9 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
         item.className = 'agent';
         item.innerHTML = \`
           <div class="agentTop">
-            <div>
-              <div class="agentName">\${escapeHtml(provider.shortLabel)}</div>
-              <span class="en">\${escapeHtml(provider.label)}</span>
+            <div class="agentName">
+              <span>\${escapeHtml(provider.shortLabel)}</span>
+              <span class="enInline">\${escapeHtml(provider.label)}</span>
             </div>
             <div class="agentActions">
               <span class="pill \${provider.status}">\${statusLabel(provider.status)}</span>
@@ -351,30 +431,27 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
           </div>
           <div class="fields">
             <label>
-              動作モデル
-              <span class="en">Model</span>
+              <span class="labelText"><span>動作モデル</span><span class="enInline">Model</span></span>
               <select data-setting="model" data-provider="\${provider.id}">
                 \${provider.modelOptions.map(option => \`<option value="\${escapeAttr(option)}" \${option === provider.settings.model ? 'selected' : ''}>\${escapeHtml(option)}</option>\`).join('')}
               </select>
             </label>
             <label>
-              推論レベル
-              <span class="en">Reasoning level</span>
+              <span class="labelText"><span>推論</span><span class="enInline">Reasoning</span></span>
               <select data-setting="reasoningLevel" data-provider="\${provider.id}">
-                \${reasoningOptions(provider.settings.reasoningLevel)}
+                \${provider.reasoningOptions.map(option => \`<option value="\${escapeAttr(option)}" \${option === provider.settings.reasoningLevel ? 'selected' : ''}>\${reasoningLabel(option)}</option>\`).join('')}
               </select>
             </label>
             <label>
-              モデル権限
-              <span class="en">Model permission</span>
+              <span class="labelText"><span>権限</span><span class="enInline">Permission</span></span>
               <select data-setting="permission" data-provider="\${provider.id}">
-                \${permissionOptions(provider.settings.permission)}
+                \${provider.permissionOptions.map(option => \`<option value="\${escapeAttr(option)}" \${option === provider.settings.permission ? 'selected' : ''}>\${permissionLabel(option)}</option>\`).join('')}
               </select>
             </label>
           </div>
           <div class="meters">
-            \${meter('5時間トークン残量', '5-hour token remaining', provider.usage.fiveHourRemainingPercent, provider.usage.fiveHourRefreshAt, provider.linked)}
-            \${meter('週間トークン残量', 'Weekly token remaining', provider.usage.weeklyRemainingPercent, provider.usage.weeklyRefreshAt, provider.linked)}
+            \${meter('five', '5時間', '5h', provider.usage.fiveHourRemainingPercent, provider.usage.fiveHourRefreshAt, provider.linked)}
+            \${meter('weekly', '週間', 'Weekly', provider.usage.weeklyRemainingPercent, provider.usage.weeklyRefreshAt, provider.linked)}
           </div>
           <div class="context">
             \${provider.webContextStatus === 'available-through-provider'
@@ -384,6 +461,13 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
         \`;
         agentsEl.appendChild(item);
       }
+
+      const exists = !!state.ruleStatus?.exists;
+      createRulesButton.disabled = !!state.busy || exists;
+      createRulesButton.textContent = exists ? '作成済み / Exists' : '自動生成 / Generate';
+      rulesHelpEl.textContent = exists
+        ? '.TRIGEN-Rulesを最優先で読み込みます。エージェント名・色・共通ルールを編集できます。 / Loaded first. Edit agent names, colors, and shared rules.'
+        : '.TRIGEN-Rulesをrepo直下に作成します。3エージェント共通の優先ルールを書けます。 / Creates .TRIGEN-Rules at the repo root for shared priority rules.';
 
       document.querySelectorAll('[data-action]').forEach(button => {
         button.addEventListener('click', () => {
@@ -401,8 +485,11 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
         });
       });
       document.querySelectorAll('button, select').forEach(element => {
-        element.disabled = !!state.busy;
+        if (element.id !== 'createRules') {
+          element.disabled = !!state.busy;
+        }
       });
+      createRulesButton.disabled = !!state.busy || exists;
     }
 
     function statusLabel(status) {
@@ -411,38 +498,33 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       return 'Setup';
     }
 
-    function reasoningOptions(selected) {
-      return [
-        ['low', 'Low'],
-        ['medium', 'Medium'],
-        ['high', 'High'],
-        ['extra-high', 'Extra High']
-      ].map(([value, label]) => \`<option value="\${value}" \${value === selected ? 'selected' : ''}>\${label}</option>\`).join('');
+    function reasoningLabel(value) {
+      if (value === 'extra-high') return 'Extra High';
+      if (value === 'max') return 'Max';
+      return value.charAt(0).toUpperCase() + value.slice(1);
     }
 
-    function permissionOptions(selected) {
-      return [
-        ['ask-every-time', 'Ask Every Time'],
-        ['read-only', 'Read Only'],
-        ['workspace-write', 'Workspace Write'],
-        ['full-access', 'Full Access']
-      ].map(([value, label]) => \`<option value="\${value}" \${value === selected ? 'selected' : ''}>\${label}</option>\`).join('');
+    function permissionLabel(value) {
+      if (value === 'ask-every-time') return 'Ask Every Time';
+      if (value === 'read-only') return 'Read Only';
+      if (value === 'workspace-write') return 'Workspace Write';
+      if (value === 'full-access') return 'Full Access';
+      return value;
     }
 
-    function meter(ja, en, value, refreshAt, linked) {
-      const percent = Number.isFinite(value) ? value : 0;
-      const label = Number.isFinite(value)
-        ? \`\${value}%\`
-        : linked ? '未取得 / Not reported' : '未連携 / Not linked';
+    function meter(kind, ja, en, value, refreshAt, linked) {
+      const hasValue = Number.isFinite(value);
+      const percent = hasValue ? value : 0;
+      const label = hasValue ? \`\${value}%\` : linked ? '未取得 / Not reported' : '未連携 / Not linked';
       const refresh = refreshAt || (linked ? '公式側の報告待ち / Waiting for provider' : 'Login後に更新 / Refresh after login');
       return \`
         <div>
           <div class="meterTop">
-            <span>\${ja}<span class="en">\${en}</span></span>
+            <span>\${ja} <span class="enInline">\${en}</span></span>
             <span>\${escapeHtml(label)}</span>
           </div>
-          <progress max="100" value="\${percent}"></progress>
-          <span class="en">Refresh: \${escapeHtml(refresh)}</span>
+          <progress class="\${kind}" max="100" value="\${percent}"></progress>
+          <div class="small">Refresh: \${escapeHtml(refresh)}</div>
         </div>
       \`;
     }
@@ -467,22 +549,19 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
 
 export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
-  private state: ChatViewState = {
-    messages: [
-      {
-        role: "system",
-        text: "3エージェント統合チャットです。Codex / Claude / Gemini は、この窓の文脈だけを共有します。\nThis is the 3-agent unified chat. Codex, Claude, and Gemini share only this chat context.",
-        timestamp: new Date().toISOString()
-      }
-    ],
-    attachments: [],
-    busy: false
-  };
+  private state: ChatViewState;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly delegate: TrigenViewDelegate
-  ) {}
+  ) {
+    this.state = {
+      threads: this.loadThreads(),
+      attachments: [],
+      busy: false,
+      displayConfig: DEFAULT_TRIGEN_DISPLAY_CONFIG
+    };
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
@@ -494,15 +573,61 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage((message) => {
       void this.handleMessage(message);
     });
+    this.state = {
+      ...this.state,
+      activeThreadId: undefined
+    };
     this.postState();
+    void this.refreshDisplayConfig();
   }
 
   async reveal(): Promise<void> {
+    this.state = {
+      ...this.state,
+      activeThreadId: undefined
+    };
+    this.postState();
     await vscode.commands.executeCommand("trigen.integratedChat.focus");
+    await this.refreshDisplayConfig();
   }
 
   private async handleMessage(message: unknown): Promise<void> {
     if (!isChatMessage(message)) {
+      return;
+    }
+
+    if (message.type === "openThread") {
+      this.state = {
+        ...this.state,
+        activeThreadId: message.threadId,
+        message: undefined
+      };
+      this.postState();
+      return;
+    }
+
+    if (message.type === "backToThreads") {
+      this.state = {
+        ...this.state,
+        activeThreadId: undefined,
+        message: undefined
+      };
+      this.postState();
+      return;
+    }
+
+    if (message.type === "newThread") {
+      this.createThread();
+      return;
+    }
+
+    if (message.type === "renameThread") {
+      await this.renameActiveThread();
+      return;
+    }
+
+    if (message.type === "exportThread") {
+      await this.exportActiveThread();
       return;
     }
 
@@ -537,7 +662,98 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private createThread(): void {
+    const now = new Date().toISOString();
+    const count = this.state.threads.length + 1;
+    const thread: ChatThread = {
+      id: newId("thread"),
+      title: `Thread ${count}`,
+      createdAt: now,
+      updatedAt: now,
+      messages: [
+        {
+          id: newId("msg"),
+          role: "system",
+          text: "3エージェント統合チャットです。Codex / Claude / Gemini は、このスレッド文脈だけを共有します。",
+          timestamp: now
+        }
+      ]
+    };
+    this.state = {
+      ...this.state,
+      threads: [thread, ...this.state.threads],
+      activeThreadId: thread.id,
+      attachments: [],
+      message: undefined
+    };
+    void this.persistThreads();
+    this.postState();
+  }
+
+  private async renameActiveThread(): Promise<void> {
+    const thread = this.activeThread();
+    if (!thread) {
+      return;
+    }
+    const title = await vscode.window.showInputBox({
+      title: "スレッド名を変更 / Rename thread",
+      value: thread.title,
+      ignoreFocusOut: true
+    });
+    const trimmed = title?.trim();
+    if (!trimmed) {
+      return;
+    }
+    this.replaceThread({
+      ...thread,
+      title: trimmed,
+      updatedAt: new Date().toISOString()
+    });
+    this.state = {
+      ...this.state,
+      message: "スレッド名を変更しました / Thread renamed."
+    };
+    this.postState();
+  }
+
+  private async exportActiveThread(): Promise<void> {
+    const thread = this.activeThread();
+    if (!thread) {
+      return;
+    }
+    await this.refreshDisplayConfig(false);
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const defaultUri = workspaceFolder
+      ? vscode.Uri.file(path.join(workspaceFolder, `${safeFileName(thread.title)}.md`))
+      : undefined;
+    const uri = await vscode.window.showSaveDialog({
+      title: "Markdownに出力 / Export Markdown",
+      defaultUri,
+      filters: {
+        Markdown: ["md"]
+      }
+    });
+    if (!uri) {
+      return;
+    }
+    await writeFile(uri.fsPath, formatMarkdownThread(thread, this.state.displayConfig), "utf8");
+    this.state = {
+      ...this.state,
+      message: "Markdownに出力しました / Markdown exported."
+    };
+    this.postState();
+  }
+
   private async sendPrompt(prompt: string): Promise<void> {
+    let thread = this.activeThread();
+    if (!thread) {
+      this.createThread();
+      thread = this.activeThread();
+    }
+    if (!thread) {
+      return;
+    }
+
     const trimmed = prompt.trim();
     if (!trimmed) {
       this.state = {
@@ -549,59 +765,88 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     const attachments = [...this.state.attachments];
-    this.state = {
-      ...this.state,
+    const userMessage: ChatMessage = {
+      id: newId("msg"),
+      role: "user",
+      text: withAttachments(trimmed, attachments),
+      timestamp: new Date().toISOString()
+    };
+    thread = appendMessages(thread, [userMessage]);
+    this.replaceThread(thread, {
       attachments: [],
       busy: true,
-      message: "TRIGENが文脈から処理経路を選択しています / TRIGEN is selecting a route from context.",
-      messages: [
-        ...this.state.messages,
-        {
-          role: "user",
-          text: withAttachments(trimmed, attachments),
-          timestamp: new Date().toISOString()
-        }
-      ]
-    };
-    this.postState();
+      message: "TRIGENが文脈から処理経路を選択しています / TRIGEN is selecting a route from context."
+    });
 
     try {
+      await this.refreshDisplayConfig(false);
       const result = await this.delegate.dispatchImplicit(trimmed, attachments);
-      this.state = {
-        ...this.state,
+      const messages: ChatMessage[] = [
+        {
+          id: newId("msg"),
+          role: "trigen",
+          text: result.routeSummary,
+          timestamp: new Date().toISOString()
+        },
+        ...result.results.map((item): ChatMessage => ({
+          id: newId("msg"),
+          role: "agent",
+          providerId: item.providerId,
+          text: providerResultText(item.ok, item.skipped, item.stdout, item.stderr, item.error),
+          timestamp: item.endedAt
+        }))
+      ];
+      this.replaceThread(appendMessages(this.activeThread() ?? thread, messages), {
         busy: false,
-        message: "完了しました / Completed.",
-        messages: [
-          ...this.state.messages,
-          {
-            role: "trigen",
-            text: result.routeSummary,
-            timestamp: new Date().toISOString()
-          },
-          ...result.results.map((item): ChatMessage => ({
-            role: "agent",
-            providerId: item.providerId,
-            text: providerResultText(item.providerId, item.ok, item.skipped, item.stdout, item.stderr, item.error),
-            timestamp: item.endedAt
-          }))
-        ]
-      };
+        message: "完了しました / Completed."
+      });
     } catch (error) {
-      this.state = {
-        ...this.state,
+      this.replaceThread(appendMessages(this.activeThread() ?? thread, [
+        {
+          id: newId("msg"),
+          role: "trigen",
+          text: `エラー / Error: ${errorMessage(error)}`,
+          timestamp: new Date().toISOString()
+        }
+      ]), {
         busy: false,
-        message: errorMessage(error),
-        messages: [
-          ...this.state.messages,
-          {
-            role: "trigen",
-            text: `エラー / Error: ${errorMessage(error)}`,
-            timestamp: new Date().toISOString()
-          }
-        ]
-      };
+        message: errorMessage(error)
+      });
     }
+  }
+
+  private activeThread(): ChatThread | undefined {
+    return this.state.threads.find((thread) => thread.id === this.state.activeThreadId);
+  }
+
+  private replaceThread(thread: ChatThread, patch: Partial<Omit<ChatViewState, "threads">> = {}): void {
+    const threads = this.state.threads.map((item) => item.id === thread.id ? thread : item);
+    this.state = {
+      ...this.state,
+      ...patch,
+      threads
+    };
+    void this.persistThreads();
     this.postState();
+  }
+
+  private loadThreads(): readonly ChatThread[] {
+    const stored = this.context.workspaceState.get<readonly ChatThread[]>(CHAT_THREADS_KEY, []);
+    return normalizeThreads(stored);
+  }
+
+  private async persistThreads(): Promise<void> {
+    await this.context.workspaceState.update(CHAT_THREADS_KEY, this.state.threads);
+  }
+
+  private async refreshDisplayConfig(post = true): Promise<void> {
+    this.state = {
+      ...this.state,
+      displayConfig: await this.delegate.getDisplayConfig()
+    };
+    if (post) {
+      this.postState();
+    }
   }
 
   private postState(): void {
@@ -636,56 +881,94 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       --button2Text: var(--vscode-button-secondaryForeground);
     }
     * { box-sizing: border-box; }
-    html, body {
-      height: 100%;
-    }
+    html, body { height: 100%; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font: 12px/1.45 var(--vscode-font-family);
+      font: 12px/1.42 var(--vscode-font-family);
       display: flex;
       flex-direction: column;
       min-width: 0;
     }
-    header {
-      padding: 10px 12px 8px;
+    #root {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .statusBar {
+      height: 36px;
+      min-height: 36px;
       border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      position: relative;
     }
-    h1 {
-      margin: 0;
-      font-size: 14px;
-      line-height: 1.2;
+    .threadsBar {
+      grid-template-columns: 1fr auto;
+    }
+    .title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-weight: 700;
-      letter-spacing: 0;
     }
-    .en {
+    .statusText {
+      min-height: 24px;
+      padding: 5px 10px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+    .threadList {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 8px;
+      display: grid;
+      align-content: start;
+      gap: 6px;
+    }
+    .threadItem {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 7px;
+      padding: 8px;
+      cursor: pointer;
+    }
+    .threadItemTitle {
       display: block;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .threadItemMeta,
+    .threadItemPreview,
+    .empty {
       color: var(--muted);
       font-size: 11px;
-      font-weight: 400;
-      margin-top: 2px;
-    }
-    .status {
-      padding: 6px 12px;
-      color: var(--muted);
-      min-height: 26px;
-      border-bottom: 1px solid var(--border);
     }
     .messages {
       flex: 1;
       min-height: 0;
       overflow: auto;
-      padding: 10px 10px 12px;
+      padding: 8px;
       display: grid;
       align-content: start;
-      gap: 8px;
+      gap: 7px;
     }
     .bubble {
       border: 1px solid var(--border);
       background: var(--panel);
       border-radius: 8px;
-      padding: 9px;
+      padding: 8px;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -696,28 +979,40 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     .bubble.trigen {
       border-color: var(--accent);
     }
-    .meta {
-      color: var(--muted);
-      font-size: 11px;
+    .messageHead {
       margin-bottom: 5px;
+      font-size: 12px;
+    }
+    .messageText {
+      line-height: 1.45;
+    }
+    .messageFooter {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 10px;
     }
     .composer {
       border-top: 1px solid var(--border);
-      padding: 8px;
+      padding: 7px;
       display: grid;
-      gap: 6px;
+      gap: 5px;
     }
     textarea {
       width: 100%;
-      min-height: 82px;
-      max-height: 180px;
-      resize: vertical;
+      min-height: 34px;
+      max-height: 140px;
+      resize: none;
+      overflow-y: auto;
       color: var(--inputText);
       background: var(--input);
       border: 1px solid var(--vscode-input-border, var(--border));
-      border-radius: 8px;
-      padding: 8px;
-      font: 12px/1.45 var(--vscode-editor-font-family);
+      border-radius: 9px;
+      padding: 8px 10px;
+      font: 12px/1.35 var(--vscode-editor-font-family);
     }
     .attachments {
       display: grid;
@@ -732,6 +1027,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 4px 6px;
+      font-size: 11px;
     }
     .bar {
       display: flex;
@@ -742,56 +1038,65 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     button {
       border: 0;
       border-radius: 7px;
-      min-width: 30px;
-      min-height: 30px;
-      padding: 0 9px;
+      min-width: 28px;
+      min-height: 28px;
+      padding: 0 8px;
       background: var(--button2);
       color: var(--button2Text);
-      font: 14px var(--vscode-font-family);
+      font: 13px var(--vscode-font-family);
       cursor: pointer;
+    }
+    button.icon {
+      font-size: 14px;
+      font-weight: 700;
     }
     button.send {
       background: var(--accent);
       color: var(--accentText);
       font-weight: 700;
     }
+    button.copy {
+      min-width: 24px;
+      min-height: 22px;
+      padding: 0 6px;
+      font-size: 11px;
+    }
     button:disabled, textarea:disabled {
       opacity: 0.55;
       cursor: default;
     }
+    .optionMenu {
+      display: none;
+      position: absolute;
+      right: 42px;
+      top: 32px;
+      z-index: 3;
+      min-width: 150px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 7px;
+      padding: 4px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    }
+    .optionMenu.open {
+      display: grid;
+      gap: 3px;
+    }
+    .optionMenu button {
+      width: 100%;
+      text-align: left;
+      border-radius: 5px;
+      justify-content: flex-start;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>3エージェント統合チャット<span class="en">3-Agent Unified Chat</span></h1>
-  </header>
-  <div id="status" class="status"></div>
-  <main id="messages" class="messages"></main>
-  <section class="composer">
-    <textarea id="prompt" placeholder="Codex / Claude / Gemini に共有する依頼を入力...&#10;Enter a request shared by Codex, Claude, and Gemini..."></textarea>
-    <div id="attachments" class="attachments"></div>
-    <div class="bar">
-      <button id="attach" title="ファイル添付 / Attach files">＋</button>
-      <button id="send" class="send" title="送信 / Send">↑</button>
-    </div>
-  </section>
+  <div id="root"></div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    let state = { messages: [], attachments: [], busy: false };
-    const statusEl = document.getElementById('status');
-    const messagesEl = document.getElementById('messages');
-    const attachmentsEl = document.getElementById('attachments');
-    const promptEl = document.getElementById('prompt');
-    const attachButton = document.getElementById('attach');
-    const sendButton = document.getElementById('send');
-
-    attachButton.addEventListener('click', () => vscode.postMessage({ type: 'attach' }));
-    sendButton.addEventListener('click', send);
-    promptEl.addEventListener('keydown', event => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-        send();
-      }
-    });
+    let state = { threads: [], attachments: [], busy: false, displayConfig: {} };
+    let optionsOpen = false;
+    const root = document.getElementById('root');
 
     window.addEventListener('message', event => {
       if (event.data?.type === 'state') {
@@ -800,47 +1105,163 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       }
     });
 
-    function send() {
-      vscode.postMessage({ type: 'send', prompt: promptEl.value });
-      promptEl.value = '';
+    function render() {
+      const active = state.threads.find(thread => thread.id === state.activeThreadId);
+      root.innerHTML = active ? renderThread(active) : renderThreadList();
+      bindCommon();
+      if (active) {
+        bindThread(active);
+      } else {
+        bindThreadList();
+      }
     }
 
-    function render() {
-      statusEl.textContent = state.message || '';
-      messagesEl.innerHTML = '';
-      for (const message of state.messages) {
-        const item = document.createElement('article');
-        item.className = \`bubble \${message.role}\`;
-        const name = message.providerId ? providerName(message.providerId) : roleName(message.role);
-        item.innerHTML = \`
-          <div class="meta">\${escapeHtml(name)} · \${escapeHtml(formatTime(message.timestamp))}</div>
-          <div>\${escapeHtml(message.text)}</div>
-        \`;
-        messagesEl.appendChild(item);
-      }
-      attachmentsEl.innerHTML = '';
-      for (const path of state.attachments) {
-        const row = document.createElement('div');
-        row.className = 'attachment';
-        row.innerHTML = \`<span>\${escapeHtml(path)}</span><button data-clear="\${escapeAttr(path)}">×</button>\`;
-        attachmentsEl.appendChild(row);
-      }
+    function renderThreadList() {
+      return \`
+        <div class="statusBar threadsBar">
+          <div class="title">Threads</div>
+          <button class="icon" data-action="newThread" title="新しいスレッド / New thread">□🖊️</button>
+        </div>
+        <div class="statusText">\${escapeHtml(state.message || '')}</div>
+        <main class="threadList">
+          \${state.threads.length === 0 ? '<div class="empty">スレッドはまだありません。右上のボタンで作成します。<br>No threads yet. Create one from the top-right button.</div>' : ''}
+          \${state.threads.map(thread => \`
+            <button class="threadItem" data-thread="\${escapeAttr(thread.id)}">
+              <span class="threadItemTitle">\${escapeHtml(thread.title)}</span>
+              <span class="threadItemMeta">\${escapeHtml(formatFullTime(thread.updatedAt))}</span>
+              <span class="threadItemPreview">\${escapeHtml(threadPreview(thread))}</span>
+            </button>
+          \`).join('')}
+        </main>
+      \`;
+    }
+
+    function renderThread(thread) {
+      return \`
+        <div class="statusBar">
+          <button class="icon" data-action="backToThreads" title="戻る / Back">←</button>
+          <div class="title">\${escapeHtml(thread.title)}</div>
+          <button class="icon" id="optionsButton" title="オプション / Options">…</button>
+          <button class="icon" data-action="newThread" title="新しいスレッド / New thread">□🖊️</button>
+          <div id="optionMenu" class="optionMenu \${optionsOpen ? 'open' : ''}">
+            <button data-action="renameThread">スレッド名を変更</button>
+            <button data-action="exportThread">Markdownに出力</button>
+          </div>
+        </div>
+        <div class="statusText">\${escapeHtml(state.message || '')}</div>
+        <main id="messages" class="messages">
+          \${thread.messages.map(message => renderMessage(message)).join('')}
+        </main>
+        <section class="composer">
+          <textarea id="prompt" rows="1" placeholder="Send Message."></textarea>
+          <div id="attachments" class="attachments">
+            \${state.attachments.map(path => \`
+              <div class="attachment"><span>\${escapeHtml(path)}</span><button data-clear="\${escapeAttr(path)}">×</button></div>
+            \`).join('')}
+          </div>
+          <div class="bar">
+            <button id="attach" class="icon" title="ファイル添付 / Attach files">＋</button>
+            <button id="send" class="send" title="送信 / Send">↑</button>
+          </div>
+        </section>
+      \`;
+    }
+
+    function renderMessage(message) {
+      const display = message.providerId ? providerDisplay(message.providerId) : undefined;
+      const head = display
+        ? \`<strong style="color: \${sanitizeColor(display.color)}">\${escapeHtml(display.name)}</strong>\`
+        : \`<strong>\${escapeHtml(roleName(message.role))}</strong>\`;
+      return \`
+        <article class="bubble \${message.role}">
+          <div class="messageHead">\${head}</div>
+          <div class="messageText">\${escapeHtml(message.text)}</div>
+          <div class="messageFooter">
+            <span>\${escapeHtml(formatFullTime(message.timestamp))}</span>
+            <button class="copy" data-copy="\${escapeAttr(message.id)}" title="コピー / Copy">□</button>
+          </div>
+        </article>
+      \`;
+    }
+
+    function bindCommon() {
+      document.querySelectorAll('[data-action]').forEach(button => {
+        button.addEventListener('click', () => {
+          optionsOpen = false;
+          vscode.postMessage({ type: button.dataset.action });
+        });
+      });
+    }
+
+    function bindThreadList() {
+      document.querySelectorAll('[data-thread]').forEach(button => {
+        button.addEventListener('click', () => {
+          vscode.postMessage({ type: 'openThread', threadId: button.dataset.thread });
+        });
+      });
+    }
+
+    function bindThread(thread) {
+      const optionsButton = document.getElementById('optionsButton');
+      optionsButton?.addEventListener('click', () => {
+        optionsOpen = !optionsOpen;
+        render();
+      });
+      document.getElementById('attach')?.addEventListener('click', () => vscode.postMessage({ type: 'attach' }));
+      document.getElementById('send')?.addEventListener('click', send);
       document.querySelectorAll('[data-clear]').forEach(button => {
         button.addEventListener('click', () => {
           vscode.postMessage({ type: 'clearAttachment', path: button.dataset.clear });
         });
       });
+      document.querySelectorAll('[data-copy]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const message = thread.messages.find(item => item.id === button.dataset.copy);
+          if (message) {
+            await navigator.clipboard.writeText(message.text);
+          }
+        });
+      });
+      const prompt = document.getElementById('prompt');
+      prompt?.addEventListener('input', resizePrompt);
+      prompt?.addEventListener('keydown', event => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          send();
+        }
+      });
+      resizePrompt();
       document.querySelectorAll('button, textarea').forEach(element => {
         element.disabled = !!state.busy;
       });
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      const messages = document.getElementById('messages');
+      if (messages) {
+        messages.scrollTop = messages.scrollHeight;
+      }
     }
 
-    function roleName(role) {
-      if (role === 'user') return '博士 / User';
-      if (role === 'trigen') return 'TRIGEN';
-      if (role === 'system') return 'System';
-      return 'Agent';
+    function send() {
+      const prompt = document.getElementById('prompt');
+      vscode.postMessage({ type: 'send', prompt: prompt?.value || '' });
+      if (prompt) {
+        prompt.value = '';
+        resizePrompt();
+      }
+    }
+
+    function resizePrompt() {
+      const prompt = document.getElementById('prompt');
+      if (!prompt) return;
+      prompt.style.height = '34px';
+      prompt.style.height = Math.min(prompt.scrollHeight, 140) + 'px';
+    }
+
+    function threadPreview(thread) {
+      const message = [...thread.messages].reverse().find(item => item.role !== 'system');
+      return message ? message.text.slice(0, 100) : 'New thread';
+    }
+
+    function providerDisplay(providerId) {
+      return state.displayConfig?.[providerId] || { name: providerName(providerId), color: '#ffffff' };
     }
 
     function providerName(providerId) {
@@ -850,10 +1271,22 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       return providerId;
     }
 
-    function formatTime(value) {
+    function roleName(role) {
+      if (role === 'user') return 'User';
+      if (role === 'trigen') return 'TRIGEN';
+      if (role === 'system') return 'System';
+      return 'Agent';
+    }
+
+    function formatFullTime(value) {
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return value;
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const pad = number => String(number).padStart(2, '0');
+      return \`\${date.getFullYear()}/\${pad(date.getMonth() + 1)}/\${pad(date.getDate())}/\${pad(date.getHours())}/\${pad(date.getMinutes())}/\${pad(date.getSeconds())}\`;
+    }
+
+    function sanitizeColor(value) {
+      return /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#ffffff';
     }
 
     function escapeHtml(value) {
@@ -876,11 +1309,17 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
 
 type SettingsMessage =
   | { type: "refresh" }
+  | { type: "createRules" }
   | { type: "login"; providerId: ProviderId }
   | { type: "logout"; providerId: ProviderId }
   | { type: "setting"; providerId: ProviderId; key: keyof AgentRuntimeSettings; value: string };
 
 type ChatWebviewMessage =
+  | { type: "openThread"; threadId: string }
+  | { type: "backToThreads" }
+  | { type: "newThread" }
+  | { type: "renameThread" }
+  | { type: "exportThread" }
   | { type: "attach" }
   | { type: "clearAttachment"; path: string }
   | { type: "send"; prompt: string };
@@ -890,7 +1329,7 @@ function isSettingsMessage(value: unknown): value is SettingsMessage {
     return false;
   }
   const candidate = value as Partial<SettingsMessage>;
-  if (candidate.type === "refresh") {
+  if (candidate.type === "refresh" || candidate.type === "createRules") {
     return true;
   }
   if ((candidate.type === "login" || candidate.type === "logout") && isProviderId(candidate.providerId)) {
@@ -907,8 +1346,17 @@ function isChatMessage(value: unknown): value is ChatWebviewMessage {
     return false;
   }
   const candidate = value as Partial<ChatWebviewMessage>;
-  if (candidate.type === "attach") {
+  if (
+    candidate.type === "backToThreads"
+    || candidate.type === "newThread"
+    || candidate.type === "renameThread"
+    || candidate.type === "exportThread"
+    || candidate.type === "attach"
+  ) {
     return true;
+  }
+  if (candidate.type === "openThread") {
+    return typeof candidate.threadId === "string";
   }
   if (candidate.type === "clearAttachment") {
     return typeof candidate.path === "string";
@@ -930,7 +1378,7 @@ function settingPatch(key: keyof AgentRuntimeSettings, value: string): Partial<A
 }
 
 function isReasoningLevel(value: string): value is ReasoningLevel {
-  return value === "low" || value === "medium" || value === "high" || value === "extra-high";
+  return value === "low" || value === "medium" || value === "high" || value === "extra-high" || value === "max";
 }
 
 function isModelPermission(value: string): value is ModelPermission {
@@ -941,6 +1389,35 @@ function isProviderId(value: unknown): value is ProviderId {
   return value === "codex" || value === "claude" || value === "gemini";
 }
 
+function normalizeThreads(value: readonly ChatThread[]): readonly ChatThread[] {
+  return value
+    .filter((thread) => typeof thread.id === "string" && typeof thread.title === "string")
+    .map((thread) => ({
+      id: thread.id,
+      title: thread.title,
+      createdAt: thread.createdAt || new Date().toISOString(),
+      updatedAt: thread.updatedAt || thread.createdAt || new Date().toISOString(),
+      messages: Array.isArray(thread.messages)
+        ? thread.messages.map((message) => ({
+          id: message.id || newId("msg"),
+          role: message.role,
+          text: String(message.text ?? ""),
+          timestamp: message.timestamp || new Date().toISOString(),
+          providerId: message.providerId
+        })).filter((message) => message.role === "user" || message.role === "trigen" || message.role === "agent" || message.role === "system")
+        : []
+    }));
+}
+
+function appendMessages(thread: ChatThread, messages: readonly ChatMessage[]): ChatThread {
+  const now = new Date().toISOString();
+  return {
+    ...thread,
+    messages: [...thread.messages, ...messages],
+    updatedAt: now
+  };
+}
+
 function withAttachments(prompt: string, attachments: readonly string[]): string {
   if (attachments.length === 0) {
     return prompt;
@@ -949,7 +1426,6 @@ function withAttachments(prompt: string, attachments: readonly string[]): string
 }
 
 function providerResultText(
-  providerId: ProviderId,
   ok: boolean,
   skipped: boolean | undefined,
   stdout: string,
@@ -958,7 +1434,45 @@ function providerResultText(
 ): string {
   const status = ok ? "完了 / OK" : skipped ? "未実行 / Skipped" : "失敗 / Failed";
   const output = stdout.trim() || stderr.trim() || error || "出力なし / No output.";
-  return `${providerId}: ${status}\n\n${output}`;
+  return `${status}\n\n${output}`;
+}
+
+function formatMarkdownThread(thread: ChatThread, displayConfig: TrigenDisplayConfig): string {
+  const lines = [`# ${thread.title}`, ""];
+  for (const message of thread.messages) {
+    const speaker = message.providerId
+      ? displayConfig[message.providerId]?.name ?? message.providerId
+      : message.role === "user"
+        ? "User"
+        : message.role === "trigen"
+          ? "TRIGEN"
+          : "System";
+    lines.push(`## ${speaker}`);
+    lines.push("");
+    lines.push(`Timestamp: ${formatLocalTimestamp(message.timestamp)}`);
+    lines.push("");
+    lines.push(message.text);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+function formatLocalTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const pad = (number: number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}/${pad(date.getHours())}/${pad(date.getMinutes())}/${pad(date.getSeconds())}`;
+}
+
+function safeFileName(value: string): string {
+  const sanitized = value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return sanitized || "trigen-thread";
+}
+
+function newId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function errorMessage(error: unknown): string {
