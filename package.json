@@ -1,0 +1,206 @@
+{
+  "name": "trigen-orchestration",
+  "displayName": "TRIGEN-Orchestration",
+  "description": "A VS Code orchestration console for Codex, Claude, and Gemini coding agents.",
+  "version": "0.1.0",
+  "publisher": "RaylirMitsukami",
+  "license": "MIT",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RaylirMitsukami/TRIGEN-Orchestration.git"
+  },
+  "engines": {
+    "vscode": "^1.98.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "codex",
+    "claude",
+    "gemini",
+    "orchestration",
+    "agents"
+  ],
+  "activationEvents": [
+    "onView:trigen.controlCenter",
+    "onCommand:trigen.openConsole",
+    "onCommand:trigen.runHealthCheck",
+    "onCommand:trigen.loadRules",
+    "onCommand:trigen.dispatchParallel",
+    "onCommand:trigen.dispatchSerial",
+    "onCommand:trigen.dispatchGroup",
+    "onCommand:trigen.dispatchHandoff"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "trigen.openConsole",
+        "title": "TRIGEN: Open Orchestration Console"
+      },
+      {
+        "command": "trigen.runHealthCheck",
+        "title": "TRIGEN: Run Provider Health Check"
+      },
+      {
+        "command": "trigen.loadRules",
+        "title": "TRIGEN: Reload Workspace Rules"
+      },
+      {
+        "command": "trigen.dispatchParallel",
+        "title": "TRIGEN: Dispatch Prompt in Parallel"
+      },
+      {
+        "command": "trigen.dispatchSerial",
+        "title": "TRIGEN: Dispatch Prompt in Series"
+      },
+      {
+        "command": "trigen.dispatchGroup",
+        "title": "TRIGEN: Start Group Round"
+      },
+      {
+        "command": "trigen.dispatchHandoff",
+        "title": "TRIGEN: Run Handoff Chain"
+      }
+    ],
+    "configuration": {
+      "title": "TRIGEN-Orchestration",
+      "properties": {
+        "trigen.rules.fileNames": {
+          "type": "array",
+          "default": [
+            "AGENTS.md",
+            "TRIGEN.md",
+            "CLAUDE.md",
+            "GEMINI.md",
+            ".github/copilot-instructions.md"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Workspace rule files loaded into every TRIGEN context bundle."
+        },
+        "trigen.rules.maxBytes": {
+          "type": "number",
+          "default": 120000,
+          "minimum": 4096,
+          "description": "Maximum bytes read from all workspace rule files."
+        },
+        "trigen.providers.codex.command": {
+          "type": "string",
+          "default": "",
+          "description": "Codex CLI command. Leave empty for auto-detection."
+        },
+        "trigen.providers.codex.args": {
+          "type": "array",
+          "default": [
+            "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "-C",
+            "${workspaceFolder}",
+            "-"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Arguments used when TRIGEN dispatches to Codex. The prompt is sent on stdin."
+        },
+        "trigen.providers.claude.command": {
+          "type": "string",
+          "default": "",
+          "description": "Claude Code CLI command. Leave empty for auto-detection."
+        },
+        "trigen.providers.claude.args": {
+          "type": "array",
+          "default": [
+            "-p",
+            "-"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Arguments used when TRIGEN dispatches to Claude. The prompt is sent on stdin."
+        },
+        "trigen.providers.gemini.command": {
+          "type": "string",
+          "default": "",
+          "description": "Gemini CLI command. Leave empty for auto-detection."
+        },
+        "trigen.providers.gemini.args": {
+          "type": "array",
+          "default": [
+            "-p",
+            "-"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Arguments used when TRIGEN dispatches to Gemini. The prompt is sent on stdin."
+        },
+        "trigen.execution.timeoutMs": {
+          "type": "number",
+          "default": 600000,
+          "minimum": 10000,
+          "description": "Maximum time for one provider execution."
+        },
+        "trigen.execution.writePromptArtifacts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write the last generated prompts under .trigen/prompts for audit and manual reuse."
+        },
+        "trigen.ui.defaultProviders": {
+          "type": "array",
+          "default": [
+            "codex",
+            "claude",
+            "gemini"
+          ],
+          "items": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude",
+              "gemini"
+            ]
+          },
+          "description": "Providers selected by default in the TRIGEN control center."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "trigen",
+          "title": "TRIGEN",
+          "icon": "media/trigen-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "trigen": [
+        {
+          "id": "trigen.controlCenter",
+          "name": "Control Center",
+          "type": "webview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test dist/test/*.test.js",
+    "vscode:package": "vsce package --allow-missing-repository --no-dependencies",
+    "verify": "npm run test && npm run vscode:package"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.4",
+    "@types/vscode": "^1.98.0",
+    "@vscode/vsce": "^3.4.2",
+    "typescript": "^5.8.3"
+  }
+}
