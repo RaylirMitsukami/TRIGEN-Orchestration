@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { access } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -227,12 +227,13 @@ export async function runProviderProcess(
 ): Promise<ProviderRunResult> {
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
+  const env = await buildProviderProcessEnvForRun(request.providerId, request.env);
 
   return await new Promise<ProviderRunResult>((resolve) => {
     const child = spawn(command, args, {
       cwd: request.workspaceFolder,
       stdio: ["pipe", "pipe", "pipe"],
-      env: buildProviderProcessEnv(request.providerId, request.env)
+      env
     });
 
     let stdout = "";
@@ -313,6 +314,91 @@ export function buildProviderProcessEnv(providerId: ProviderId, extraEnv?: Reado
     }
   }
   return env;
+}
+
+async function buildProviderProcessEnvForRun(providerId: ProviderId, extraEnv?: Readonly<Record<string, string>>): Promise<NodeJS.ProcessEnv> {
+  const env = buildProviderProcessEnv(providerId, extraEnv);
+  if (providerId === "gemini" && env.GOOGLE_GENAI_USE_GCA === "true" && !env.GOOGLE_CLOUD_ACCESS_TOKEN) {
+    const accessToken = await refreshGeminiCloudAccessToken();
+    if (accessToken) {
+      env.GOOGLE_CLOUD_ACCESS_TOKEN = accessToken;
+    }
+  }
+  return env;
+}
+
+async function refreshGeminiCloudAccessToken(): Promise<string | undefined> {
+  try {
+    const credentialsPath = path.join(os.homedir(), ".gemini", "oauth_creds.json");
+    const raw = await readFile(credentialsPath, "utf8");
+    const credentials = JSON.parse(raw) as { refresh_token?: unknown };
+    if (typeof credentials.refresh_token !== "string" || credentials.refresh_token.length === 0) {
+      return undefined;
+    }
+    const oauthClient = await readGeminiCliOauthClient();
+    if (!oauthClient) {
+      return undefined;
+    }
+
+    const params = new URLSearchParams({
+      client_id: oauthClient.clientId,
+      client_secret: oauthClient.clientSecret,
+      refresh_token: credentials.refresh_token,
+      grant_type: "refresh_token"
+    });
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      body: params
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    const body = await response.json() as { access_token?: unknown };
+    return typeof body.access_token === "string" ? body.access_token : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readGeminiCliOauthClient(): Promise<{ clientId: string; clientSecret: string } | undefined> {
+  const npxCacheDir = path.join(os.homedir(), ".npm", "_npx");
+  const entries = await safeReadDir(npxCacheDir);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const bundleDir = path.join(npxCacheDir, entry.name, "node_modules", "@google", "gemini-cli", "bundle");
+    const bundleFiles = await safeReadDir(bundleDir);
+    for (const file of bundleFiles) {
+      if (!file.isFile() || !file.name.endsWith(".js")) {
+        continue;
+      }
+      const candidate = await parseGeminiOauthClient(path.join(bundleDir, file.name));
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
+}
+
+async function parseGeminiOauthClient(filePath: string): Promise<{ clientId: string; clientSecret: string } | undefined> {
+  try {
+    const source = await readFile(filePath, "utf8");
+    const clientId = source.match(/OAUTH_CLIENT_ID\s*=\s*"([^"]+)"/)?.[1];
+    const clientSecret = source.match(/OAUTH_CLIENT_SECRET\s*=\s*"([^"]+)"/)?.[1];
+    return clientId && clientSecret ? { clientId, clientSecret } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function safeReadDir(directory: string): Promise<import("node:fs").Dirent[]> {
+  try {
+    return await readdir(directory, { withFileTypes: true });
+  } catch {
+    return [];
+  }
 }
 
 function classifyProviderFailure(

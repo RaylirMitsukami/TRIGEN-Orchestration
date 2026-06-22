@@ -387,7 +387,7 @@ function defaultProviderArgs(
 ): readonly string[] {
   if (providerId === "claude") {
     const args = isNpxCommand(commandPath)
-      ? ["-y", "@anthropic-ai/claude-code"]
+      ? ["--prefer-offline", "-y", "@anthropic-ai/claude-code"]
       : [];
     args.push("--print", "--model", "${claudeModel}", "--permission-mode", "${claudePermissionMode}");
     if (settings.reasoningLevel !== "auto") {
@@ -398,7 +398,7 @@ function defaultProviderArgs(
 
   if (providerId === "gemini") {
     const args = isNpxCommand(commandPath)
-      ? ["-y", "@google/gemini-cli"]
+      ? ["--prefer-offline", "-y", "@google/gemini-cli"]
       : [];
     args.push(
       "--prompt",

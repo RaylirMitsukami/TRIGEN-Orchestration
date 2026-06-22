@@ -16,21 +16,35 @@ function patchRequest(moduleRef) {
 
   const originalRequest = moduleRef.request;
   function trigenPatchedRequest(options, ...args) {
+    let target;
     try {
-      const target = normalizeOptions(options);
+      target = normalizeOptions(options);
       if (target && TARGET_HOSTS.has(target.hostname)) {
         forceIdentityEncoding(target.options);
       }
     } catch {
       // This patch must never block the provider CLI. Fall back to the original request.
     }
-    return originalRequest.call(this, options, ...args);
+    const request = originalRequest.call(this, options, ...args);
+    if (target && TARGET_HOSTS.has(target.hostname)) {
+      patchCodeAssistStreamingResponse(request);
+    }
+    return request;
   }
 
   Object.defineProperty(trigenPatchedRequest, PATCH_MARKER, {
     value: true
   });
   moduleRef.request = trigenPatchedRequest;
+}
+
+function patchCodeAssistStreamingResponse(request) {
+  request.prependListener("response", (response) => {
+    if (response.headers?.["transfer-encoding"] === "chunked" && !response.headers["content-length"]) {
+      // Gemini CLI's bundled node-fetch can misclassify valid SSE completion as ERR_STREAM_PREMATURE_CLOSE.
+      delete response.headers["transfer-encoding"];
+    }
+  });
 }
 
 function normalizeOptions(options) {

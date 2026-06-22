@@ -106,6 +106,8 @@ Use `.TRIGEN-Rules` for development policies, prohibitions, output formats, revi
    If `SERVICE_DISABLED` appears, enable `Gemini for Google Cloud API` (`cloudaicompanion.googleapis.com`) for that Project ID, then retry.
    Project ID設定後は、コマンドパレットの`TRIGEN: Open Gemini Cloud API Activation`から有効化ページを開けます。
    After setting the Project ID, open the activation page from `TRIGEN: Open Gemini Cloud API Activation` in the Command Palette.
+   TRIGENはGemini CLIの既存OAuthファイルがある場合、実行時だけ一時access tokenへ更新して子プロセスへ渡します。Cookieやブラウザ資格情報は読み取りません。
+   When Gemini CLI OAuth credentials already exist, TRIGEN refreshes a temporary access token only for the child process. It does not read cookies or browser credentials.
 4. 各エージェントのモデル、推論レベル、権限を選択します。
    Select each agent's model, reasoning level, and permission.
 5. 右Secondary Side BarのTRIGENを開き、スレッドを選ぶか新規作成して、統合チャットに依頼を書いて送信ボタンで実行します。

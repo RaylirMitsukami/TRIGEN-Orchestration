@@ -6,6 +6,7 @@
 - Added automatic official npm CLI fallback through `npx` for Claude Code and Gemini when `claude` or `gemini` are not on PATH.
 - Added a visible Gemini CLI authentication terminal path and `GOOGLE_GENAI_USE_GCA=true` runtime environment for API-key-free Gemini CLI use.
 - Added a Gemini CLI compression workaround, a `trigen.providers.gemini.googleCloudProject` setting, and clearer Gemini for Google Cloud API disabled diagnostics.
+- Added transient Gemini CLI OAuth token refresh and `npx --prefer-offline` fallback so non-interactive Gemini dispatch can run from existing CLI credentials.
 - Kept token quota meters visible for further experiments while preserving the no-scraping/no-cookie-storage boundary.
 - Added thread deletion with confirmation, hover highlighting, and lightweight tooltips for unified chat controls.
 - Tightened chat message spacing and made `.TRIGEN-Rules` disabled state look like a disabled button.
