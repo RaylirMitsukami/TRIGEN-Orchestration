@@ -33,15 +33,15 @@ Each card contains:
   Model selection, for example `gpt-5.5`, `opus`, `gemini-3.5-flash`, and `gemini-3.1-flash-lite`.
 - 推論レベル選択。選択中のプロバイダーとモデルに応じて、`Auto`、`Minimal`、`Low`、`Medium`、`High`、`X High`、`Max`などから選べる項目が変わります。
   Reasoning level selection. Available choices such as `Auto`, `Minimal`, `Low`, `Medium`, `High`, `X High`, and `Max` change by provider and model.
-- モデル権限設定。CodexはCLIのsandbox/approval境界、ClaudeはClaude Code permission mode、Geminiは利用可能な能力範囲をモデルごとに表示します。
-  Model permission setting. Codex maps to CLI sandbox/approval boundaries, Claude maps to Claude Code permission modes, and Gemini shows model capability scope.
+- モデル権限設定。CodexはCLI sandbox、ClaudeはClaude Code permission mode、GeminiはGemini CLI approval modeをモデルごとに表示します。
+  Model permission setting. Codex maps to CLI sandbox mode, Claude maps to Claude Code permission modes, and Gemini maps to Gemini CLI approval modes.
 - 5時間トークン残量と週間トークン残量のメーター。公式の安定した取得口が無い場合は「公式取得口なし」と表示し、利用規約を回避する取得は行いません。
   5-hour and weekly token remaining meters. If no stable provider reporting surface exists, TRIGEN shows an unavailable state and does not bypass provider terms.
 - `.TRIGEN-Rules`自動作成ボタン。repo直下に既に存在する場合は`作成済み`として無効化されます。
   `.TRIGEN-Rules` create button. It is disabled as `作成済み` when the file already exists at the repository root.
 
-トークン残量は、プロバイダーが安定した取得手段を公開している場合はその報告値を表示する設計です。公開手段がない場合、TRIGENは残量を推測せず、ログイン済みブラウザの資格情報も読み取りません。
-Token meters are designed to show provider-reported values when a stable provider surface is available. If no supported surface is available, TRIGEN does not infer remaining quota or read credentials from logged-in browsers.
+トークン残量メーターは実験用に表示を残しています。プロバイダーが安定した取得手段を公開している場合はその報告値を表示する設計です。公開手段がない場合、TRIGENは残量を推測せず、ログイン済みブラウザの資格情報も読み取りません。
+Token meters remain visible for experiments. They are designed to show provider-reported values when a stable provider surface is available. If no supported surface is available, TRIGEN does not infer remaining quota or read credentials from logged-in browsers.
 
 ## 統合チャット / Unified Chat
 

@@ -35,6 +35,7 @@ describe("providers", () => {
     const gemini = getProviderDefinition("gemini");
     assert.equal(gemini.label, "Gemini");
     assert.equal(gemini.loginUrl, "https://gemini.google.com/");
+    assert.deepEqual(gemini.commandCandidates, ["gemini", "npx"]);
     assert.deepEqual(gemini.modelOptions.map((item) => item.name), [
       "gemini-3.1-pro-preview",
       "gemini-3.5-flash",
@@ -51,10 +52,15 @@ describe("providers", () => {
     assert.deepEqual(getModelProfile("gemini", "gemini-3.1-pro-preview").reasoningLevels.map((item) => item.id), ["low", "medium", "high"]);
     assert.deepEqual(getModelProfile("gemini", "gemini-3.5-flash").reasoningLevels.map((item) => item.id), ["minimal", "low", "medium", "high"]);
     assert.deepEqual(getModelProfile("codex", "gpt-5.5").permissions.map((item) => item.id), [
-      "read-only-on-request",
-      "workspace-write-on-request",
-      "workspace-write-untrusted",
-      "workspace-write-never"
+      "read-only",
+      "workspace-write",
+      "danger-full-access"
+    ]);
+    assert.deepEqual(getModelProfile("gemini", "gemini-3.5-flash").permissions.map((item) => item.id), [
+      "plan",
+      "default",
+      "auto_edit",
+      "yolo"
     ]);
   });
 });

@@ -15,10 +15,9 @@ const CODEX_REASONING = [
 const CODEX_REASONING_COMPACT = CODEX_REASONING.filter((item) => item.id !== "xhigh");
 
 const CODEX_PERMISSIONS = [
-  choice("read-only-on-request", "Read Only + Ask", "Read files; ask before commands or edits."),
-  choice("workspace-write-on-request", "Workspace Write + Ask", "Read/edit/run inside the workspace with approval prompts."),
-  choice("workspace-write-untrusted", "Trusted Commands Only", "Workspace write with stricter command approval."),
-  choice("workspace-write-never", "Workspace Write + No Prompts", "Workspace-only automation without approval prompts.")
+  choice("read-only", "Read Only", "Read files without write access."),
+  choice("workspace-write", "Workspace Write", "Read, edit, and run commands inside the workspace sandbox."),
+  choice("danger-full-access", "Danger Full Access", "Run without Codex sandboxing; use only in trusted local workspaces.")
 ];
 
 const CLAUDE_REASONING_FULL = [
@@ -59,9 +58,10 @@ const GEMINI_THINKING_STANDARD = [
 const GEMINI_THINKING_PRO = GEMINI_THINKING_STANDARD.filter((item) => item.id !== "minimal");
 
 const GEMINI_CAPABILITIES = [
-  choice("prompt-only", "Prompt Only", "Prompt and file context only."),
-  choice("code-execution", "Code Execution", "Use Gemini code-execution capability when available."),
-  choice("tools-grounding", "Tools + Grounding", "Use provider-managed tools and grounding when available.")
+  choice("plan", "Plan", "Read-only planning mode."),
+  choice("default", "Default", "Ask before tool actions."),
+  choice("auto_edit", "Auto Edit", "Auto-approve edit tools."),
+  choice("yolo", "YOLO", "Auto-approve all tools.")
 ];
 
 export const PROVIDERS: readonly ProviderDefinition[] = [
@@ -87,16 +87,14 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
       "model_reasoning_effort=\"${reasoningLevel}\"",
       "--sandbox",
       "${codexSandbox}",
-      "--ask-for-approval",
-      "${codexApproval}",
       "-"
     ],
     docsUrl: "https://developers.openai.com/codex/ide",
     loginUrl: "https://chatgpt.com/",
     modelOptions: [
-      modelProfile("gpt-5.5", CODEX_REASONING, CODEX_PERMISSIONS, "high", "workspace-write-on-request"),
-      modelProfile("gpt-5.4", CODEX_REASONING, CODEX_PERMISSIONS, "high", "workspace-write-on-request"),
-      modelProfile("gpt-5.4-mini", CODEX_REASONING_COMPACT, CODEX_PERMISSIONS, "medium", "workspace-write-on-request")
+      modelProfile("gpt-5.5", CODEX_REASONING, CODEX_PERMISSIONS, "high", "workspace-write"),
+      modelProfile("gpt-5.4", CODEX_REASONING, CODEX_PERMISSIONS, "high", "workspace-write"),
+      modelProfile("gpt-5.4-mini", CODEX_REASONING_COMPACT, CODEX_PERMISSIONS, "medium", "workspace-write")
     ],
     defaultModel: "gpt-5.5"
   },
@@ -106,7 +104,7 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
     shortLabel: "Claude",
     officialExtensionIds: [],
     authProviderIds: [],
-    commandCandidates: ["claude"],
+    commandCandidates: ["claude", "npx"],
     defaultArgs: ["-p", "-"],
     docsUrl: "https://code.claude.com/docs/en/vs-code",
     loginUrl: "https://claude.ai/login",
@@ -125,15 +123,23 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
     shortLabel: "Gemini",
     officialExtensionIds: [],
     authProviderIds: [],
-    commandCandidates: ["gemini"],
-    defaultArgs: ["-p", "-"],
+    commandCandidates: ["gemini", "npx"],
+    defaultArgs: [
+      "--prompt",
+      "",
+      "--model",
+      "${geminiModel}",
+      "--approval-mode",
+      "${geminiApprovalMode}",
+      "--skip-trust"
+    ],
     docsUrl: "https://gemini.google.com/",
     loginUrl: "https://gemini.google.com/",
     modelOptions: [
-      modelProfile("gemini-3.1-pro-preview", GEMINI_THINKING_PRO, GEMINI_CAPABILITIES, "high", "tools-grounding"),
-      modelProfile("gemini-3.5-flash", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "code-execution"),
-      modelProfile("gemini-3-flash-preview", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "code-execution"),
-      modelProfile("gemini-3.1-flash-lite", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "prompt-only")
+      modelProfile("gemini-3.1-pro-preview", GEMINI_THINKING_PRO, GEMINI_CAPABILITIES, "high", "default"),
+      modelProfile("gemini-3.5-flash", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "auto_edit"),
+      modelProfile("gemini-3-flash-preview", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "auto_edit"),
+      modelProfile("gemini-3.1-flash-lite", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "default")
     ],
     defaultModel: "gemini-3.5-flash"
   }

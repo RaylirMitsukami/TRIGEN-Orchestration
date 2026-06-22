@@ -20,6 +20,13 @@ describe("control center UI source", () => {
     }
   });
 
+  it("includes hover tooltips and guarded thread deletion", () => {
+    assert.match(source, /tooltipButton/);
+    assert.match(source, /deleteThread/);
+    assert.match(source, /showWarningMessage/);
+    assert.match(source, /スレッドを削除/);
+  });
+
   it("does not render old literal text controls or dead quota labels", () => {
     for (const fragment of [
       ">＋<",

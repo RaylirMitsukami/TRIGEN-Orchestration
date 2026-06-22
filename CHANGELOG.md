@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4
+
+- Fixed Codex CLI execution by removing the unsupported `--ask-for-approval` argument from `codex exec` dispatch.
+- Added automatic official npm CLI fallback through `npx` for Claude Code and Gemini when `claude` or `gemini` are not on PATH.
+- Kept token quota meters visible for further experiments while preserving the no-scraping/no-cookie-storage boundary.
+- Added thread deletion with confirmation, hover highlighting, and lightweight tooltips for unified chat controls.
+- Tightened chat message spacing and made `.TRIGEN-Rules` disabled state look like a disabled button.
+
 ## 0.1.3
 
 - Corrected Claude Code effort choices per model: Opus/Fable support `low` through `max`, Sonnet uses `low`, `medium`, `high`, and `max`, and Haiku uses provider default effort.

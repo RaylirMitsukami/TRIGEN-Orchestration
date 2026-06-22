@@ -15,10 +15,9 @@ import type {
 
 const CHAT_THREADS_KEY = "trigen.chatThreads";
 const SYSTEM_INTRO_TEXT = [
-  "TRIGEN-Orchestration統合窓です。",
-  ".TRIGEN-Rulesとワークスペース規則を優先して読み込みます。",
-  "各エージェントは左の設定で選んだモデル・推論・権限境界に従います。",
-  "CLIが有効なエージェントはrepo内の読取・編集・実行まで担当します。"
+  "TRIGEN統合窓です。",
+  ".TRIGEN-Rulesを優先し、左設定のモデル・権限で各CLIへ渡します。",
+  "CLI未設定のエージェントは未実行として表示されます。"
 ].join("\n");
 
 export interface IntegratedDispatchResult extends OrchestrationResult {
@@ -376,9 +375,19 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       white-space: nowrap;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      min-width: 76px;
+      min-width: 28px;
+      width: 32px;
       justify-content: center;
+    }
+    .rulesButton {
+      min-width: 74px;
+      border: 1px solid transparent;
+    }
+    .rulesButton.done:disabled {
+      opacity: 1;
+      background: var(--button2);
+      color: var(--button2Text);
+      border-color: var(--border);
     }
     .tokenUnavailable {
       color: var(--muted);
@@ -392,9 +401,8 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
 <body>
   <header>
     <h1>TRIGEN-Orchestration</h1>
-    <button id="refresh" class="refresh primary" title="状態を更新 / Refresh">
+    <button id="refresh" class="refresh primary" title="状態を更新 / Refresh" aria-label="Refresh">
       <span class="codicon codicon-refresh" aria-hidden="true"></span>
-      <span>更新</span>
     </button>
   </header>
   <div id="status" class="statusLine"></div>
@@ -402,7 +410,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
   <section class="rulesBox">
     <div class="rulesActions">
       <strong>.TRIGEN-Rules</strong>
-      <button id="createRules" class="primary">自動作成</button>
+      <button id="createRules" class="rulesButton primary">自動作成</button>
     </div>
     <div id="rulesHelp" class="small"></div>
   </section>
@@ -478,6 +486,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       const exists = !!state.ruleStatus?.exists;
       createRulesButton.disabled = !!state.busy || exists;
       createRulesButton.classList.toggle('primary', !exists);
+      createRulesButton.classList.toggle('done', exists);
       createRulesButton.textContent = exists ? '作成済み' : '自動作成';
       rulesHelpEl.textContent = exists
         ? '.TRIGEN-Rulesを最優先で読み込みます。エージェント名・色・共通ルールを編集できます。 / Loaded first. Edit agent names, colors, and shared rules.'
@@ -631,6 +640,11 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    if (message.type === "deleteThread") {
+      await this.deleteActiveThread();
+      return;
+    }
+
     if (message.type === "attach") {
       const uris = await vscode.window.showOpenDialog({
         canSelectFiles: true,
@@ -741,6 +755,31 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       ...this.state,
       message: "Markdownに出力しました / Markdown exported."
     };
+    this.postState();
+  }
+
+  private async deleteActiveThread(): Promise<void> {
+    const thread = this.activeThread();
+    if (!thread) {
+      return;
+    }
+    const confirmation = await vscode.window.showWarningMessage(
+      `「${thread.title}」を削除しますか？`,
+      { modal: true },
+      "スレッドを削除",
+      "キャンセル"
+    );
+    if (confirmation !== "スレッドを削除") {
+      return;
+    }
+    this.state = {
+      ...this.state,
+      activeThreadId: undefined,
+      attachments: [],
+      threads: this.state.threads.filter((item) => item.id !== thread.id),
+      message: "スレッドを削除しました / Thread deleted."
+    };
+    void this.persistThreads();
     this.postState();
   }
 
@@ -959,16 +998,16 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       flex: 1;
       min-height: 0;
       overflow: auto;
-      padding: 8px;
+      padding: 6px;
       display: grid;
       align-content: start;
-      gap: 7px;
+      gap: 6px;
     }
     .bubble {
       border: 1px solid var(--border);
       background: var(--panel);
-      border-radius: 8px;
-      padding: 8px;
+      border-radius: 7px;
+      padding: 6px 7px;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -980,7 +1019,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       border-color: var(--accent);
     }
     .bubble.system {
-      padding: 6px 8px;
+      padding: 4px 6px;
       color: var(--muted);
     }
     .bubble.system .messageHead {
@@ -991,18 +1030,18 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       line-height: 1.34;
     }
     .messageHead {
-      margin-bottom: 5px;
-      font-size: 12px;
+      margin-bottom: 3px;
+      font-size: 11px;
     }
     .messageText {
-      line-height: 1.45;
+      line-height: 1.36;
     }
     .messageFooter {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      margin-top: 7px;
+      margin-top: 5px;
       color: var(--muted);
       font-size: 10px;
     }
@@ -1070,11 +1109,21 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      background: transparent;
+      color: var(--text);
+    }
+    button.icon:hover:not(:disabled),
+    button.icon:focus-visible {
+      background: var(--vscode-toolbar-hoverBackground, var(--button2));
+      outline: none;
     }
     button.attach {
       border: 1px solid var(--border);
       background: var(--input);
       color: var(--text);
+    }
+    button.attach:hover:not(:disabled) {
+      background: var(--button2);
     }
     button.send {
       background: var(--accent);
@@ -1114,6 +1163,42 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       text-align: left;
       border-radius: 5px;
       justify-content: flex-start;
+      background: transparent;
+      color: var(--text);
+      padding: 5px 8px;
+      min-height: 26px;
+    }
+    .optionMenu button:hover {
+      background: var(--vscode-list-hoverBackground, var(--button2));
+    }
+    .optionMenu button.danger {
+      color: var(--vscode-errorForeground, #f48771);
+    }
+    .tooltipButton {
+      position: relative;
+    }
+    .tooltipButton::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      z-index: 5;
+      left: 50%;
+      top: calc(100% + 5px);
+      transform: translateX(-50%);
+      opacity: 0;
+      pointer-events: none;
+      white-space: nowrap;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 6px;
+      background: var(--vscode-editorHoverWidget-background, var(--panel));
+      color: var(--vscode-editorHoverWidget-foreground, var(--text));
+      font-size: 10px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+      transition: opacity 80ms ease;
+    }
+    .tooltipButton:hover::after,
+    .tooltipButton:focus-visible::after {
+      opacity: 1;
     }
   </style>
 </head>
@@ -1147,7 +1232,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       return \`
         <div class="statusBar threadsBar">
           <div class="title">Threads</div>
-          <button class="icon" data-action="newThread" title="新しいスレッド / New thread" aria-label="New thread"><span class="codicon codicon-edit" aria-hidden="true"></span></button>
+          <button class="icon tooltipButton" data-action="newThread" data-tooltip="新しいスレッド" title="新しいスレッド / New thread" aria-label="New thread"><span class="codicon codicon-edit" aria-hidden="true"></span></button>
         </div>
         \${state.message ? \`<div class="statusText">\${escapeHtml(state.message)}</div>\` : ''}
         <main class="threadList">
@@ -1166,13 +1251,14 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     function renderThread(thread) {
       return \`
         <div class="statusBar">
-          <button class="icon" data-action="backToThreads" title="戻る / Back" aria-label="Back"><span class="codicon codicon-arrow-left" aria-hidden="true"></span></button>
+          <button class="icon tooltipButton" data-action="backToThreads" data-tooltip="戻る" title="戻る / Back" aria-label="Back"><span class="codicon codicon-arrow-left" aria-hidden="true"></span></button>
           <div class="title">\${escapeHtml(thread.title)}</div>
-          <button class="icon" id="optionsButton" title="オプション / Options" aria-label="Options"><span class="codicon codicon-ellipsis" aria-hidden="true"></span></button>
-          <button class="icon" data-action="newThread" title="新しいスレッド / New thread" aria-label="New thread"><span class="codicon codicon-edit" aria-hidden="true"></span></button>
+          <button class="icon tooltipButton" id="optionsButton" data-tooltip="オプション" title="オプション / Options" aria-label="Options"><span class="codicon codicon-ellipsis" aria-hidden="true"></span></button>
+          <button class="icon tooltipButton" data-action="newThread" data-tooltip="新しいスレッド" title="新しいスレッド / New thread" aria-label="New thread"><span class="codicon codicon-edit" aria-hidden="true"></span></button>
           <div id="optionMenu" class="optionMenu \${optionsOpen ? 'open' : ''}">
             <button data-action="renameThread">スレッド名を変更</button>
             <button data-action="exportThread">Markdownに出力</button>
+            <button class="danger" data-action="deleteThread">スレッドを削除</button>
           </div>
         </div>
         \${state.message ? \`<div class="statusText">\${escapeHtml(state.message)}</div>\` : ''}
@@ -1183,13 +1269,13 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
           <textarea id="prompt" rows="1" placeholder="Send Message."></textarea>
           <div id="attachments" class="attachments">
             \${state.attachments.map(path => \`
-              <div class="attachment"><span>\${escapeHtml(path)}</span><button class="icon" data-clear="\${escapeAttr(path)}" title="添付を外す / Remove attachment" aria-label="Remove attachment"><span class="codicon codicon-close" aria-hidden="true"></span></button></div>
+              <div class="attachment"><span>\${escapeHtml(path)}</span><button class="icon tooltipButton" data-tooltip="添付を外す" data-clear="\${escapeAttr(path)}" title="添付を外す / Remove attachment" aria-label="Remove attachment"><span class="codicon codicon-close" aria-hidden="true"></span></button></div>
             \`).join('')}
           </div>
           <div class="bar">
-            <button id="attach" class="icon attach" title="ファイル添付 / Attach files" aria-label="Attach files"><span class="codicon codicon-add" aria-hidden="true"></span></button>
+            <button id="attach" class="icon attach tooltipButton" data-tooltip="ファイル添付" title="ファイル添付 / Attach files" aria-label="Attach files"><span class="codicon codicon-add" aria-hidden="true"></span></button>
             <div class="composerBrand">TRIGEN-Orchestration</div>
-            <button id="send" class="icon send" title="送信 / Send" aria-label="Send"><span class="codicon codicon-arrow-up" aria-hidden="true"></span></button>
+            <button id="send" class="icon send tooltipButton" data-tooltip="送信" title="送信 / Send" aria-label="Send"><span class="codicon codicon-arrow-up" aria-hidden="true"></span></button>
           </div>
         </section>
       \`;
@@ -1206,7 +1292,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
           <div class="messageText">\${escapeHtml(message.text)}</div>
           <div class="messageFooter">
             <span>\${escapeHtml(formatFullTime(message.timestamp))}</span>
-            <button class="copy" data-copy="\${escapeAttr(message.id)}" title="コピー / Copy" aria-label="Copy"><span class="codicon codicon-copy" aria-hidden="true"></span></button>
+            <button class="copy icon tooltipButton" data-tooltip="コピー" data-copy="\${escapeAttr(message.id)}" title="コピー / Copy" aria-label="Copy"><span class="codicon codicon-copy" aria-hidden="true"></span></button>
           </div>
         </article>
       \`;
@@ -1348,6 +1434,7 @@ type ChatWebviewMessage =
   | { type: "newThread" }
   | { type: "renameThread" }
   | { type: "exportThread" }
+  | { type: "deleteThread" }
   | { type: "attach" }
   | { type: "clearAttachment"; path: string }
   | { type: "send"; prompt: string };
@@ -1379,6 +1466,7 @@ function isChatMessage(value: unknown): value is ChatWebviewMessage {
     || candidate.type === "newThread"
     || candidate.type === "renameThread"
     || candidate.type === "exportThread"
+    || candidate.type === "deleteThread"
     || candidate.type === "attach"
   ) {
     return true;

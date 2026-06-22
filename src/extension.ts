@@ -266,7 +266,7 @@ class TrigenController {
     const config = vscode.workspace.getConfiguration("trigen");
     const timeoutMs = config.get<number>("execution.timeoutMs", 600000);
     const settings = normalizeSettings(request.providerId, this.agentSettings()[request.providerId]);
-    const configuredArgs = configuredProviderArgs(config, request.providerId, settings);
+    const configuredArgs = configuredProviderArgs(config, request.providerId, settings, health.cliPath);
     const args = expandArgs(configuredArgs, {
       workspaceFolder: request.workspaceFolder,
       model: settings.model,
@@ -342,7 +342,8 @@ class TrigenController {
 function configuredProviderArgs(
   config: vscode.WorkspaceConfiguration,
   providerId: ProviderId,
-  settings: AgentRuntimeSettings
+  settings: AgentRuntimeSettings,
+  commandPath: string
 ): readonly string[] {
   const key = `providers.${providerId}.args`;
   const inspection = config.inspect<string[]>(key);
@@ -354,23 +355,54 @@ function configuredProviderArgs(
   }
 
   const provider = getProviderDefinition(providerId);
-  return defaultProviderArgs(providerId, provider.defaultArgs, settings);
+  return defaultProviderArgs(providerId, provider.defaultArgs, settings, commandPath);
 }
 
 function defaultProviderArgs(
   providerId: ProviderId,
   providerDefaultArgs: readonly string[],
-  settings: AgentRuntimeSettings
+  settings: AgentRuntimeSettings,
+  commandPath: string
 ): readonly string[] {
-  if (providerId !== "claude") {
+  if (providerId === "claude") {
+    const args = isNpxCommand(commandPath)
+      ? ["-y", "@anthropic-ai/claude-code"]
+      : [];
+    args.push("--print", "--model", "${claudeModel}", "--permission-mode", "${claudePermissionMode}");
+    if (settings.reasoningLevel !== "auto") {
+      args.push("--effort", "${claudeEffort}");
+    }
+    return args;
+  }
+
+  if (providerId === "gemini") {
+    const args = isNpxCommand(commandPath)
+      ? ["-y", "@google/gemini-cli"]
+      : [];
+    args.push(
+      "--prompt",
+      "",
+      "--model",
+      "${geminiModel}",
+      "--approval-mode",
+      "${geminiApprovalMode}",
+      "--skip-trust",
+      "--output-format",
+      "text"
+    );
+    return args;
+  }
+
+  if (providerId !== "codex") {
     return providerDefaultArgs;
   }
 
-  const args = ["-p", "-", "--model", "${claudeModel}", "--permission-mode", "${claudePermissionMode}"];
-  if (settings.reasoningLevel !== "auto") {
-    args.push("--effort", "${claudeEffort}");
-  }
-  return args;
+  return providerDefaultArgs;
+}
+
+function isNpxCommand(commandPath: string): boolean {
+  const baseName = path.basename(commandPath).toLowerCase();
+  return baseName === "npx" || baseName === "npx.cmd";
 }
 
 function requireWorkspaceFolder(): string {
@@ -403,10 +435,8 @@ function normalizeSettings(providerId: ProviderId, value: Partial<AgentRuntimeSe
 
 function providerExecutionVariables(providerId: ProviderId, settings: AgentRuntimeSettings): Record<string, string> {
   if (providerId === "codex") {
-    const [codexSandbox, codexApproval] = codexPermissionFlags(settings.permission);
     return {
-      codexSandbox,
-      codexApproval
+      codexSandbox: codexSandboxMode(settings.permission)
     };
   }
   if (providerId === "claude") {
@@ -419,21 +449,20 @@ function providerExecutionVariables(providerId: ProviderId, settings: AgentRunti
   return {
     geminiModel: settings.model,
     geminiThinkingLevel: settings.reasoningLevel,
+    geminiApprovalMode: settings.permission,
     geminiCapability: settings.permission
   };
 }
 
-function codexPermissionFlags(permission: string): readonly [string, string] {
+function codexSandboxMode(permission: string): string {
   switch (permission) {
-    case "read-only-on-request":
-      return ["read-only", "on-request"];
-    case "workspace-write-untrusted":
-      return ["workspace-write", "untrusted"];
-    case "workspace-write-never":
-      return ["workspace-write", "never"];
-    case "workspace-write-on-request":
+    case "read-only":
+      return "read-only";
+    case "danger-full-access":
+      return "danger-full-access";
+    case "workspace-write":
     default:
-      return ["workspace-write", "on-request"];
+      return "workspace-write";
   }
 }
 

@@ -2,7 +2,7 @@
   "name": "trigen-orchestration",
   "displayName": "TRIGEN-Orchestration",
   "description": "Codex、Claude、Geminiを1つの統合チャットで扱うVS Code用3エージェント・オーケストレーション拡張。",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "RaylirMitsukami",
   "license": "MIT",
   "private": false,
@@ -89,14 +89,12 @@
             "model_reasoning_effort=\"${reasoningLevel}\"",
             "--sandbox",
             "${codexSandbox}",
-            "--ask-for-approval",
-            "${codexApproval}",
             "-"
           ],
           "items": {
             "type": "string"
           },
-          "description": "Arguments used when TRIGEN dispatches to Codex. The prompt is sent on stdin. Variables include workspaceFolder, model, reasoningLevel, permission, codexSandbox, and codexApproval."
+          "description": "Arguments used when TRIGEN dispatches to Codex. The prompt is sent on stdin. Variables include workspaceFolder, model, reasoningLevel, permission, and codexSandbox."
         },
         "trigen.providers.claude.command": {
           "type": "string",
@@ -106,13 +104,18 @@
         "trigen.providers.claude.args": {
           "type": "array",
           "default": [
-            "-p",
-            "-"
+            "--print",
+            "--model",
+            "${claudeModel}",
+            "--permission-mode",
+            "${claudePermissionMode}",
+            "--effort",
+            "${claudeEffort}"
           ],
           "items": {
             "type": "string"
           },
-          "description": "Arguments used when TRIGEN dispatches to Claude. The prompt is sent on stdin."
+          "description": "Arguments used when TRIGEN dispatches to Claude. The prompt is sent on stdin. When Claude is not on PATH, TRIGEN can use npx with @anthropic-ai/claude-code automatically."
         },
         "trigen.providers.gemini.command": {
           "type": "string",
@@ -122,13 +125,20 @@
         "trigen.providers.gemini.args": {
           "type": "array",
           "default": [
-            "-p",
-            "-"
+            "--prompt",
+            "",
+            "--model",
+            "${geminiModel}",
+            "--approval-mode",
+            "${geminiApprovalMode}",
+            "--skip-trust",
+            "--output-format",
+            "text"
           ],
           "items": {
             "type": "string"
           },
-          "description": "Arguments used when TRIGEN dispatches to Gemini. The prompt is sent on stdin."
+          "description": "Arguments used when TRIGEN dispatches to Gemini. The prompt is sent on stdin. When Gemini is not on PATH, TRIGEN can use npx with @google/gemini-cli automatically."
         },
         "trigen.execution.timeoutMs": {
           "type": "number",
