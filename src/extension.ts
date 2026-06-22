@@ -58,6 +58,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const rules = await controller.loadRules();
       vscode.window.showInformationMessage(`TRIGEN loaded ${rules.documents.length} rule file(s).`);
       await settingsView.refresh("ルールを再読み込みしました / Rules reloaded.");
+    }),
+    vscode.commands.registerCommand("trigen.openGeminiCloudApiActivation", async () => {
+      await openGeminiCloudApiActivation(vscode.workspace.getConfiguration("trigen"));
     })
   );
 }
@@ -229,6 +232,9 @@ class TrigenController {
       notes.push(geminiProject
         ? `Gemini Google Cloud project: ${geminiProject}`
         : "Gemini standard-tier Code Assist may require trigen.providers.gemini.googleCloudProject.");
+      if (geminiProject) {
+        notes.push(`Gemini for Google Cloud API activation: ${geminiCloudApiActivationUrl(geminiProject)}`);
+      }
     }
     notes.push(cliPath ? `CLI detected: ${cliPath}` : `CLI not detected. Configure trigen.providers.${providerId}.command when installed.`);
 
@@ -453,6 +459,19 @@ function providerExtraEnv(config: vscode.WorkspaceConfiguration, providerId: Pro
 
 function geminiGoogleCloudProject(config: vscode.WorkspaceConfiguration): string {
   return config.get<string>("providers.gemini.googleCloudProject", "").trim();
+}
+
+async function openGeminiCloudApiActivation(config: vscode.WorkspaceConfiguration): Promise<void> {
+  const projectId = geminiGoogleCloudProject(config);
+  if (!projectId) {
+    vscode.window.showWarningMessage("Set trigen.providers.gemini.googleCloudProject before opening Gemini Cloud API activation.");
+    return;
+  }
+  await vscode.env.openExternal(vscode.Uri.parse(geminiCloudApiActivationUrl(projectId)));
+}
+
+function geminiCloudApiActivationUrl(projectId: string): string {
+  return `https://console.developers.google.com/apis/api/cloudaicompanion.googleapis.com/overview?project=${encodeURIComponent(projectId)}`;
 }
 
 function requireWorkspaceFolder(): string {

@@ -43,6 +43,10 @@
       {
         "command": "trigen.loadRules",
         "title": "TRIGEN: Reload Workspace Rules"
+      },
+      {
+        "command": "trigen.openGeminiCloudApiActivation",
+        "title": "TRIGEN: Open Gemini Cloud API Activation"
       }
     ],
     "configuration": {
