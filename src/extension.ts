@@ -118,6 +118,9 @@ class TrigenController {
     );
     if (confirmation === "連携済みにする") {
       await this.setLinked(providerId, true);
+      if (providerId === "gemini") {
+        await maybeOpenGeminiCliAuthTerminal();
+      }
       return true;
     }
     return false;
@@ -220,6 +223,9 @@ class TrigenController {
     const notes: string[] = [];
 
     notes.push("Official VS Code extension dependency is disabled; link the provider through its official browser login.");
+    if (providerId === "gemini") {
+      notes.push("Gemini CLI runs with GOOGLE_GENAI_USE_GCA=true when no Gemini API or Vertex env is configured; first run may require browser authentication.");
+    }
     notes.push(cliPath ? `CLI detected: ${cliPath}` : `CLI not detected. Configure trigen.providers.${providerId}.command when installed.`);
 
     return {
@@ -403,6 +409,25 @@ function defaultProviderArgs(
 function isNpxCommand(commandPath: string): boolean {
   const baseName = path.basename(commandPath).toLowerCase();
   return baseName === "npx" || baseName === "npx.cmd";
+}
+
+async function maybeOpenGeminiCliAuthTerminal(): Promise<void> {
+  const answer = await vscode.window.showInformationMessage(
+    "Gemini CLIは初回のみ公式ブラウザ認証が必要です。TRIGENからGeminiを実行する場合は、CLI認証ターミナルを開いてください。",
+    "CLI認証を開く",
+    "後で"
+  );
+  if (answer !== "CLI認証を開く") {
+    return;
+  }
+  const terminal = vscode.window.createTerminal({
+    name: "TRIGEN Gemini CLI Login",
+    env: {
+      GOOGLE_GENAI_USE_GCA: "true"
+    }
+  });
+  terminal.show(true);
+  terminal.sendText("npx -y @google/gemini-cli");
 }
 
 function requireWorkspaceFolder(): string {

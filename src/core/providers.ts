@@ -231,7 +231,7 @@ export async function runProviderProcess(
     const child = spawn(command, args, {
       cwd: request.workspaceFolder,
       stdio: ["pipe", "pipe", "pipe"],
-      env: process.env
+      env: providerProcessEnv(request.providerId)
     });
 
     let stdout = "";
@@ -295,6 +295,19 @@ export async function runProviderProcess(
 
     child.stdin.end(request.prompt, "utf8");
   });
+}
+
+function providerProcessEnv(providerId: ProviderId): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  if (
+    providerId === "gemini"
+    && !env.GEMINI_API_KEY
+    && !env.GOOGLE_GENAI_USE_VERTEXAI
+    && !env.GOOGLE_GENAI_USE_GCA
+  ) {
+    env.GOOGLE_GENAI_USE_GCA = "true";
+  }
+  return env;
 }
 
 async function resolveOneExecutable(candidate: string, envPath: string): Promise<string | undefined> {

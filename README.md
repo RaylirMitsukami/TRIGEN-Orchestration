@@ -98,6 +98,8 @@ Use `.TRIGEN-Rules` for development policies, prohibitions, output formats, revi
    Use the generation button at the bottom of the left column to create `.TRIGEN-Rules` at the repository root when needed.
 3. 左Activity BarのTRIGENを開き、Codex、Claude、GeminiのLoginを実行します。
    Open TRIGEN from the left Activity Bar and run Login for Codex, Claude, and Gemini.
+   Geminiは初回のみ、表示される案内から`CLI認証を開く`を選び、公式CLIのブラウザ認証を完了してください。
+   For Gemini, choose `CLI認証を開く` on the first run and complete the official CLI browser authentication.
 4. 各エージェントのモデル、推論レベル、権限を選択します。
    Select each agent's model, reasoning level, and permission.
 5. 右Secondary Side BarのTRIGENを開き、スレッドを選ぶか新規作成して、統合チャットに依頼を書いて送信ボタンで実行します。
