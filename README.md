@@ -31,8 +31,8 @@ Each card contains:
   `Linked` / `Setup` status. Linked means account linking is recorded, and Setup means linking is still needed. TRIGEN does not depend on official VS Code extension installation.
 - 動作モデル選択。例: `gpt-5.5`、`opus`、`gemini-3.5-flash`、`gemini-3.1-flash-lite`。
   Model selection, for example `gpt-5.5`, `opus`, `gemini-3.5-flash`, and `gemini-3.1-flash-lite`.
-- 推論レベル選択。選択中のプロバイダーとモデルに応じて、`Low`、`Medium`、`High`、`X High`、`Max`、`Ultracode`、`Minimal`などから選べる項目が変わります。
-  Reasoning level selection. Available choices such as `Low`, `Medium`, `High`, `X High`, `Max`, `Ultracode`, and `Minimal` change by provider and model.
+- 推論レベル選択。選択中のプロバイダーとモデルに応じて、`Auto`、`Minimal`、`Low`、`Medium`、`High`、`X High`、`Max`などから選べる項目が変わります。
+  Reasoning level selection. Available choices such as `Auto`, `Minimal`, `Low`, `Medium`, `High`, `X High`, and `Max` change by provider and model.
 - モデル権限設定。CodexはCLIのsandbox/approval境界、ClaudeはClaude Code permission mode、Geminiは利用可能な能力範囲をモデルごとに表示します。
   Model permission setting. Codex maps to CLI sandbox/approval boundaries, Claude maps to Claude Code permission modes, and Gemini shows model capability scope.
 - 5時間トークン残量と週間トークン残量のメーター。公式の安定した取得口が無い場合は「公式取得口なし」と表示し、利用規約を回避する取得は行いません。

@@ -264,9 +264,9 @@ class TrigenController {
     }
 
     const config = vscode.workspace.getConfiguration("trigen");
-    const configuredArgs = config.get<string[]>(`providers.${request.providerId}.args`, [...provider.defaultArgs]);
     const timeoutMs = config.get<number>("execution.timeoutMs", 600000);
     const settings = normalizeSettings(request.providerId, this.agentSettings()[request.providerId]);
+    const configuredArgs = configuredProviderArgs(config, request.providerId, settings);
     const args = expandArgs(configuredArgs, {
       workspaceFolder: request.workspaceFolder,
       model: settings.model,
@@ -337,6 +337,40 @@ class TrigenController {
       source: "unavailable"
     };
   }
+}
+
+function configuredProviderArgs(
+  config: vscode.WorkspaceConfiguration,
+  providerId: ProviderId,
+  settings: AgentRuntimeSettings
+): readonly string[] {
+  const key = `providers.${providerId}.args`;
+  const inspection = config.inspect<string[]>(key);
+  const configured = inspection?.workspaceFolderValue
+    ?? inspection?.workspaceValue
+    ?? inspection?.globalValue;
+  if (Array.isArray(configured)) {
+    return configured;
+  }
+
+  const provider = getProviderDefinition(providerId);
+  return defaultProviderArgs(providerId, provider.defaultArgs, settings);
+}
+
+function defaultProviderArgs(
+  providerId: ProviderId,
+  providerDefaultArgs: readonly string[],
+  settings: AgentRuntimeSettings
+): readonly string[] {
+  if (providerId !== "claude") {
+    return providerDefaultArgs;
+  }
+
+  const args = ["-p", "-", "--model", "${claudeModel}", "--permission-mode", "${claudePermissionMode}"];
+  if (settings.reasoningLevel !== "auto") {
+    args.push("--effort", "${claudeEffort}");
+  }
+  return args;
 }
 
 function requireWorkspaceFolder(): string {

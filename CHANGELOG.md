@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Corrected Claude Code effort choices per model: Opus/Fable support `low` through `max`, Sonnet uses `low`, `medium`, `high`, and `max`, and Haiku uses provider default effort.
+- Added Claude Code runtime argument mapping for `--model`, `--permission-mode`, and supported `--effort` values when no custom CLI argument template is configured.
+
 ## 0.1.2
 
 - Replaced literal toolbar glyphs with bundled VS Code Codicons in the settings and unified chat webviews.

@@ -26,19 +26,27 @@ const CLAUDE_REASONING_FULL = [
   choice("medium", "Medium"),
   choice("high", "High"),
   choice("xhigh", "X High"),
-  choice("max", "Max"),
-  choice("ultracode", "Ultracode")
+  choice("max", "Max")
 ];
 
-const CLAUDE_REASONING_STANDARD = CLAUDE_REASONING_FULL.filter((item) => item.id !== "ultracode");
-const CLAUDE_REASONING_COMPACT = CLAUDE_REASONING_STANDARD.filter((item) => item.id !== "xhigh" && item.id !== "max");
+const CLAUDE_REASONING_SONNET = [
+  choice("low", "Low"),
+  choice("medium", "Medium"),
+  choice("high", "High"),
+  choice("max", "Max")
+];
+
+const CLAUDE_REASONING_AUTO = [
+  choice("auto", "Auto", "Claude Code model default or unsupported effort.")
+];
 
 const CLAUDE_PERMISSIONS = [
   choice("default", "Default", "Ask before file edits and commands."),
   choice("acceptEdits", "Accept Edits", "Auto-accept file edits; ask for commands."),
   choice("plan", "Plan", "Planning-only mode."),
   choice("auto", "Auto", "Read/edit/run in the workspace with provider-managed checks."),
-  choice("dontAsk", "Don't Ask", "Provider-side no-prompt mode.")
+  choice("dontAsk", "Don't Ask", "Only pre-approved tools run without asking."),
+  choice("bypassPermissions", "Bypass Permissions", "Everything without prompts; use only in isolated containers or VMs.")
 ];
 
 const GEMINI_THINKING_STANDARD = [
@@ -104,10 +112,10 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
     loginUrl: "https://claude.ai/login",
     modelOptions: [
       modelProfile("opus", CLAUDE_REASONING_FULL, CLAUDE_PERMISSIONS, "high", "default"),
-      modelProfile("sonnet", CLAUDE_REASONING_FULL, CLAUDE_PERMISSIONS, "high", "default"),
-      modelProfile("haiku", CLAUDE_REASONING_COMPACT, CLAUDE_PERMISSIONS.filter((item) => item.id !== "dontAsk"), "medium", "default"),
-      modelProfile("fable", CLAUDE_REASONING_STANDARD, CLAUDE_PERMISSIONS, "high", "default"),
-      modelProfile("opusplan", CLAUDE_REASONING_STANDARD, CLAUDE_PERMISSIONS, "high", "plan")
+      modelProfile("sonnet", CLAUDE_REASONING_SONNET, CLAUDE_PERMISSIONS, "high", "default"),
+      modelProfile("haiku", CLAUDE_REASONING_AUTO, CLAUDE_PERMISSIONS.filter((item) => item.id !== "auto" && item.id !== "bypassPermissions"), "auto", "default"),
+      modelProfile("fable", CLAUDE_REASONING_FULL, CLAUDE_PERMISSIONS, "high", "default"),
+      modelProfile("opusplan", CLAUDE_REASONING_SONNET, CLAUDE_PERMISSIONS, "high", "plan")
     ],
     defaultModel: "opus"
   },
