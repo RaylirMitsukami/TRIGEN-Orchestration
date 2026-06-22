@@ -3,62 +3,131 @@ import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ProviderDefinition, ProviderId, ProviderModelProfile, ProviderRunRequest, ProviderRunResult } from "./types";
+import type { ProviderChoice, ProviderDefinition, ProviderId, ProviderModelProfile, ProviderRunRequest, ProviderRunResult } from "./types";
+
+const CODEX_REASONING = [
+  choice("low", "Low"),
+  choice("medium", "Medium"),
+  choice("high", "High"),
+  choice("xhigh", "X High")
+];
+
+const CODEX_REASONING_COMPACT = CODEX_REASONING.filter((item) => item.id !== "xhigh");
+
+const CODEX_PERMISSIONS = [
+  choice("read-only-on-request", "Read Only + Ask", "Read files; ask before commands or edits."),
+  choice("workspace-write-on-request", "Workspace Write + Ask", "Read/edit/run inside the workspace with approval prompts."),
+  choice("workspace-write-untrusted", "Trusted Commands Only", "Workspace write with stricter command approval."),
+  choice("workspace-write-never", "Workspace Write + No Prompts", "Workspace-only automation without approval prompts.")
+];
+
+const CLAUDE_REASONING_FULL = [
+  choice("low", "Low"),
+  choice("medium", "Medium"),
+  choice("high", "High"),
+  choice("xhigh", "X High"),
+  choice("max", "Max"),
+  choice("ultracode", "Ultracode")
+];
+
+const CLAUDE_REASONING_STANDARD = CLAUDE_REASONING_FULL.filter((item) => item.id !== "ultracode");
+const CLAUDE_REASONING_COMPACT = CLAUDE_REASONING_STANDARD.filter((item) => item.id !== "xhigh" && item.id !== "max");
+
+const CLAUDE_PERMISSIONS = [
+  choice("default", "Default", "Ask before file edits and commands."),
+  choice("acceptEdits", "Accept Edits", "Auto-accept file edits; ask for commands."),
+  choice("plan", "Plan", "Planning-only mode."),
+  choice("auto", "Auto", "Read/edit/run in the workspace with provider-managed checks."),
+  choice("dontAsk", "Don't Ask", "Provider-side no-prompt mode.")
+];
+
+const GEMINI_THINKING_STANDARD = [
+  choice("minimal", "Minimal"),
+  choice("low", "Low"),
+  choice("medium", "Medium"),
+  choice("high", "High")
+];
+
+const GEMINI_THINKING_PRO = GEMINI_THINKING_STANDARD.filter((item) => item.id !== "minimal");
+
+const GEMINI_CAPABILITIES = [
+  choice("prompt-only", "Prompt Only", "Prompt and file context only."),
+  choice("code-execution", "Code Execution", "Use Gemini code-execution capability when available."),
+  choice("tools-grounding", "Tools + Grounding", "Use provider-managed tools and grounding when available.")
+];
 
 export const PROVIDERS: readonly ProviderDefinition[] = [
   {
     id: "codex",
     label: "Codex",
     shortLabel: "Codex",
-    officialExtensionIds: ["openai.chatgpt"],
-    authProviderIds: ["openai"],
+    officialExtensionIds: [],
+    authProviderIds: [],
     commandCandidates: [
       "codex",
       "/Applications/Codex.app/Contents/Resources/codex"
     ],
-    defaultArgs: ["exec", "--json", "--skip-git-repo-check", "-C", "${workspaceFolder}", "-"],
+    defaultArgs: [
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "-C",
+      "${workspaceFolder}",
+      "--model",
+      "${model}",
+      "-c",
+      "model_reasoning_effort=\"${reasoningLevel}\"",
+      "--sandbox",
+      "${codexSandbox}",
+      "--ask-for-approval",
+      "${codexApproval}",
+      "-"
+    ],
     docsUrl: "https://developers.openai.com/codex/ide",
     loginUrl: "https://chatgpt.com/",
     modelOptions: [
-      modelProfile("GPT-5.5", ["low", "medium", "high", "extra-high", "max"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
-      modelProfile("GPT-5.4", ["low", "medium", "high", "extra-high"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
-      modelProfile("GPT-5.4 Mini", ["low", "medium", "high"], ["ask-every-time", "read-only", "workspace-write"], "medium", "ask-every-time")
+      modelProfile("gpt-5.5", CODEX_REASONING, CODEX_PERMISSIONS, "high", "workspace-write-on-request"),
+      modelProfile("gpt-5.4", CODEX_REASONING, CODEX_PERMISSIONS, "high", "workspace-write-on-request"),
+      modelProfile("gpt-5.4-mini", CODEX_REASONING_COMPACT, CODEX_PERMISSIONS, "medium", "workspace-write-on-request")
     ],
-    defaultModel: "GPT-5.5"
+    defaultModel: "gpt-5.5"
   },
   {
     id: "claude",
     label: "Claude Code",
     shortLabel: "Claude",
-    officialExtensionIds: ["anthropic.claude-code"],
-    authProviderIds: ["anthropic", "claude"],
+    officialExtensionIds: [],
+    authProviderIds: [],
     commandCandidates: ["claude"],
     defaultArgs: ["-p", "-"],
     docsUrl: "https://code.claude.com/docs/en/vs-code",
     loginUrl: "https://claude.ai/login",
     modelOptions: [
-      modelProfile("Opus 4.8", ["low", "medium", "high", "extra-high", "max"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
-      modelProfile("Sonnet 4.6", ["low", "medium", "high", "max"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
-      modelProfile("Haiku 4.5", ["low", "medium", "high"], ["ask-every-time", "read-only", "workspace-write"], "medium", "ask-every-time")
+      modelProfile("opus", CLAUDE_REASONING_FULL, CLAUDE_PERMISSIONS, "high", "default"),
+      modelProfile("sonnet", CLAUDE_REASONING_FULL, CLAUDE_PERMISSIONS, "high", "default"),
+      modelProfile("haiku", CLAUDE_REASONING_COMPACT, CLAUDE_PERMISSIONS.filter((item) => item.id !== "dontAsk"), "medium", "default"),
+      modelProfile("fable", CLAUDE_REASONING_STANDARD, CLAUDE_PERMISSIONS, "high", "default"),
+      modelProfile("opusplan", CLAUDE_REASONING_STANDARD, CLAUDE_PERMISSIONS, "high", "plan")
     ],
-    defaultModel: "Opus 4.8"
+    defaultModel: "opus"
   },
   {
     id: "gemini",
     label: "Gemini",
     shortLabel: "Gemini",
     officialExtensionIds: [],
-    authProviderIds: ["google"],
+    authProviderIds: [],
     commandCandidates: ["gemini"],
     defaultArgs: ["-p", "-"],
     docsUrl: "https://gemini.google.com/",
     loginUrl: "https://gemini.google.com/",
     modelOptions: [
-      modelProfile("Gemini 3.1 Pro", ["low", "medium", "high", "extra-high"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time"),
-      modelProfile("Gemini 3.1 Flash", ["low", "medium", "high"], ["ask-every-time", "read-only", "workspace-write"], "medium", "ask-every-time"),
-      modelProfile("Gemini 2.5 Pro", ["low", "medium", "high", "extra-high"], ["ask-every-time", "read-only", "workspace-write", "full-access"], "high", "ask-every-time")
+      modelProfile("gemini-3.1-pro-preview", GEMINI_THINKING_PRO, GEMINI_CAPABILITIES, "high", "tools-grounding"),
+      modelProfile("gemini-3.5-flash", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "code-execution"),
+      modelProfile("gemini-3-flash-preview", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "code-execution"),
+      modelProfile("gemini-3.1-flash-lite", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "prompt-only")
     ],
-    defaultModel: "Gemini 3.1 Pro"
+    defaultModel: "gemini-3.5-flash"
   }
 ];
 
@@ -91,6 +160,10 @@ function modelProfile(
     defaultReasoningLevel,
     defaultPermission
   };
+}
+
+function choice(id: string, label: string, description?: string): ProviderChoice {
+  return { id, label, description };
 }
 
 export async function resolveExecutable(candidates: readonly string[], envPath = process.env.PATH ?? ""): Promise<string | undefined> {

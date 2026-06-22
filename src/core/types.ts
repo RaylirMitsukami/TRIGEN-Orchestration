@@ -2,14 +2,20 @@ export type ProviderId = "codex" | "claude" | "gemini";
 
 export type DispatchMode = "parallel" | "serial" | "group" | "handoff";
 
-export type ReasoningLevel = "low" | "medium" | "high" | "extra-high" | "max";
+export type ReasoningLevel = string;
 
-export type ModelPermission = "ask-every-time" | "read-only" | "workspace-write" | "full-access";
+export type ModelPermission = string;
+
+export interface ProviderChoice {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+}
 
 export interface ProviderModelProfile {
   readonly name: string;
-  readonly reasoningLevels: readonly ReasoningLevel[];
-  readonly permissions: readonly ModelPermission[];
+  readonly reasoningLevels: readonly ProviderChoice[];
+  readonly permissions: readonly ProviderChoice[];
   readonly defaultReasoningLevel: ReasoningLevel;
   readonly defaultPermission: ModelPermission;
 }
@@ -63,8 +69,8 @@ export interface ProviderControlState {
   readonly settings: AgentRuntimeSettings;
   readonly usage: ProviderUsageWindow;
   readonly modelOptions: readonly string[];
-  readonly reasoningOptions: readonly ReasoningLevel[];
-  readonly permissionOptions: readonly ModelPermission[];
+  readonly reasoningOptions: readonly ProviderChoice[];
+  readonly permissionOptions: readonly ProviderChoice[];
   readonly loginUrl: string;
   readonly docsUrl: string;
   readonly webContextStatus: "available-through-provider" | "link-required";

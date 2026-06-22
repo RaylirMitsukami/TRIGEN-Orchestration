@@ -56,8 +56,8 @@ TRIGEN has the following routes, but the UI does not expose explicit mode button
   VS Code activation, view registration, controller, account link state, and settings persistence.
 - `src/ui/controlCenter.ts`: 左設定ビューと右統合チャットビューのWebview実装。
   Webview implementation for the left settings view and right unified chat view.
-- `src/core/providers.ts`: プロバイダー定義、必要な場合だけの公式拡張検出、CLI検出、実行。
-  Provider definitions, official-extension detection only where needed, CLI detection, and execution.
+- `src/core/providers.ts`: プロバイダー定義、CLI検出、プロバイダー別モデル・推論・権限候補、実行。
+  Provider definitions, CLI detection, provider-specific model/reasoning/permission choices, and execution.
 - `src/core/rules.ts`: `.TRIGEN-Rules`を先頭にしたルール読み込み。
   Rule loading with `.TRIGEN-Rules` first.
 - `src/core/orchestrator.ts`: 暗黙モード判定と直列/並列/グループ/ハンドオフ実行。

@@ -22,6 +22,9 @@ export const DEFAULT_TRIGEN_DISPLAY_CONFIG: TrigenDisplayConfig = {
 
 export const DEFAULT_TRIGEN_RULES_TEMPLATE = `[ TRIGEN-Orchestration Rules ]
 
+This file is the repository-local priority rule document for TRIGEN-Orchestration.
+Codex / Claude / Gemini must read these rules before lower-priority workspace hints.
+
 1. Agents Name :
 Codex : [ Codex ]
 Claude : [ Claude ]

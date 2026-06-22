@@ -1,12 +1,16 @@
 import * as assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandArgs, estimateTokens, getModelProfile, getProviderDefinition, shellQuote } from "../core/providers";
+import { expandArgs, estimateTokens, getModelProfile, getProviderDefinition, PROVIDERS, shellQuote } from "../core/providers";
 
 describe("providers", () => {
   it("expands workspace variables in command args", () => {
     assert.deepEqual(
-      expandArgs(["exec", "-C", "${workspaceFolder}", "-"], { workspaceFolder: "/tmp/repo" }),
-      ["exec", "-C", "/tmp/repo", "-"]
+      expandArgs(["exec", "-C", "${workspaceFolder}", "--model", "${model}", "--sandbox", "${codexSandbox}", "-"], {
+        workspaceFolder: "/tmp/repo",
+        model: "gpt-5.5",
+        codexSandbox: "workspace-write"
+      }),
+      ["exec", "-C", "/tmp/repo", "--model", "gpt-5.5", "--sandbox", "workspace-write", "-"]
     );
   });
 
@@ -20,17 +24,36 @@ describe("providers", () => {
     assert.equal(shellQuote("hello world"), "'hello world'");
   });
 
-  it("does not route Gemini through an extension dependency", () => {
-    const gemini = getProviderDefinition("gemini");
+  it("does not route providers through official VS Code extension dependencies", () => {
+    for (const provider of PROVIDERS) {
+      assert.deepEqual(provider.officialExtensionIds, []);
+      assert.deepEqual(provider.authProviderIds, []);
+    }
+  });
 
+  it("uses current Gemini model names", () => {
+    const gemini = getProviderDefinition("gemini");
     assert.equal(gemini.label, "Gemini");
-    assert.deepEqual(gemini.officialExtensionIds, []);
     assert.equal(gemini.loginUrl, "https://gemini.google.com/");
+    assert.deepEqual(gemini.modelOptions.map((item) => item.name), [
+      "gemini-3.1-pro-preview",
+      "gemini-3.5-flash",
+      "gemini-3-flash-preview",
+      "gemini-3.1-flash-lite"
+    ]);
+    assert.equal(gemini.modelOptions.some((item) => item.name === "Gemini 3.1 Flash"), false);
   });
 
   it("uses model-specific reasoning and permission profiles", () => {
-    assert.deepEqual(getModelProfile("claude", "Sonnet 4.6").reasoningLevels, ["low", "medium", "high", "max"]);
-    assert.deepEqual(getModelProfile("claude", "Opus 4.8").reasoningLevels, ["low", "medium", "high", "extra-high", "max"]);
-    assert.deepEqual(getModelProfile("claude", "Haiku 4.5").permissions, ["ask-every-time", "read-only", "workspace-write"]);
+    assert.deepEqual(getModelProfile("claude", "sonnet").reasoningLevels.map((item) => item.id), ["low", "medium", "high", "xhigh", "max", "ultracode"]);
+    assert.deepEqual(getModelProfile("claude", "haiku").reasoningLevels.map((item) => item.id), ["low", "medium", "high"]);
+    assert.deepEqual(getModelProfile("gemini", "gemini-3.1-pro-preview").reasoningLevels.map((item) => item.id), ["low", "medium", "high"]);
+    assert.deepEqual(getModelProfile("gemini", "gemini-3.5-flash").reasoningLevels.map((item) => item.id), ["minimal", "low", "medium", "high"]);
+    assert.deepEqual(getModelProfile("codex", "gpt-5.5").permissions.map((item) => item.id), [
+      "read-only-on-request",
+      "workspace-write-on-request",
+      "workspace-write-untrusted",
+      "workspace-write-never"
+    ]);
   });
 });

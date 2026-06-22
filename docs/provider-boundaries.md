@@ -9,8 +9,8 @@ TRIGEN-Orchestration is a VS Code extension that respects the official usage mod
   Opens each provider's official login page in an external browser.
 - VS Code内でLogin/Logoutの連携状態を記録します。
   Records Login/Logout link state inside VS Code.
-- 公式VS Code拡張機能とローカル実行コマンドを検出します。
-  Detects official VS Code extensions and local execution commands.
+- ローカル実行コマンドを検出します。公式VS Code拡張機能の有無には依存しません。
+  Detects local execution commands. It does not depend on official VS Code extension installation.
 - `.TRIGEN-Rules`を最優先にワークスペースルールを読み込みます。
   Loads workspace rules with `.TRIGEN-Rules` as the highest-priority file.
 - 統合チャット文脈を各プロバイダー実行面へ渡します。
@@ -38,13 +38,13 @@ Provider-side web settings and memory are used only to the extent that the offic
 
 ## Token Meters / トークンメーター
 
-5時間トークン残量と週間トークン残量はUIとして実装されています。プロバイダーが安定した取得面を公開している場合は、その値を表示する設計です。現時点で取得面がない場合は`未取得 / Not reported`として表示します。
-5-hour and weekly token meters are implemented in the UI. They are designed to show provider-reported values when a stable provider surface exists. If no supported surface exists, TRIGEN shows `Not reported`.
+5時間トークン残量と週間トークン残量はUIとして実装されています。プロバイダーが安定した取得面を公開している場合は、その値を表示する設計です。現時点で取得面がない場合は`公式取得口なし`として表示し、ログイン済みブラウザの資格情報は読み取りません。
+5-hour and weekly token meters are implemented in the UI. They are designed to show provider-reported values when a stable provider surface exists. If no supported surface exists, TRIGEN shows an unavailable provider-reporting state and does not read credentials from logged-in browsers.
 
 ## Reliable Integration Path / 安定した連携手順
 
-1. 公式Web、公式CLI、または必要な場合だけ公式拡張機能で各プロバイダーへログインします。
-   Sign in to each provider through the official web, CLI, or extension surface only where needed.
+1. 公式Web、または各公式CLIで各プロバイダーへログインします。
+   Sign in to each provider through the official web or official CLI.
 2. 各プロバイダー単体で動作確認します。
    Confirm each provider works by itself.
 3. TRIGENの左設定ビューでLoginとモデル設定を行います。

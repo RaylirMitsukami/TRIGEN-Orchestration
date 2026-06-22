@@ -6,8 +6,8 @@
   Build, test, and package the project as a VS Code extension.
 - Codex、Claude、Geminiのプロバイダー定義を持つ。
   Define Codex, Claude, and Gemini providers.
-- 公式拡張機能が必要なプロバイダーは拡張機能を検出し、Geminiなど拡張機能不要の経路はCLI/公式Webアカウント導線を使う。
-  Detect official extensions only where a provider needs them, and use CLI/official web-account paths for providers such as Gemini that do not require one.
+- 公式Webアカウント導線とCLI実行面を使い、公式VS Code拡張機能の有無には依存しない。
+  Use official web-account linking and CLI runtime surfaces without depending on official VS Code extension installation.
 
 Status: complete.
 
@@ -30,8 +30,8 @@ Status: implemented.
 
 - プロバイダーごとのCLI出力パーサーを追加する。
   Add provider-specific CLI output parsers.
-- モデル選択を各プロバイダーの実コマンド引数へ安全に接続する。
-  Safely map model selection to provider command arguments.
+- モデル選択を各プロバイダーの実コマンド引数へ安全に接続する。Codexは実装済みで、Claude/Geminiは公式CLI仕様に合わせて個別強化する。
+  Safely map model selection to provider command arguments. Codex is implemented; Claude/Gemini should be hardened per official CLI behavior.
 - キャンセル、進捗表示、長時間実行の復旧を追加する。
   Add cancellation, progress, and long-run recovery.
 - プロバイダーが公開する安定した取得面があればトークンメーターへ接続する。

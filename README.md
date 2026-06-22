@@ -25,23 +25,23 @@ The settings view lists agent cards in this order: `Codex`, `Claude`, `Gemini`.
 各カードには次の項目があります。
 Each card contains:
 
-- `Login` / `Logout`ボタン。Loginは各プロバイダーの公式ログイン画面を外部ブラウザで開きます。
-  `Login` / `Logout` button. Login opens the provider's official login page in an external browser.
-- `Ready` / `Linked` / `Setup`ステータス。実行面が検出できる場合はReady、アカウント連携済みの場合はLinked、未設定の場合はSetupです。
-  `Ready` / `Linked` / `Setup` status. Ready means a runtime is detected, Linked means account linking is recorded, and Setup means configuration is still needed.
-- 動作モデル選択。例: `GPT-5.5`、`Opus 4.8`、`Gemini 3.1 Pro`。
-  Model selection, for example `GPT-5.5`, `Opus 4.8`, and `Gemini 3.1 Pro`.
-- 推論レベル選択。選択中のモデルに応じて、`Low`、`Medium`、`High`、`Extra High`、`Max`などから選べる項目が変わります。
-  Reasoning level selection. Available choices such as `Low`, `Medium`, `High`, `Extra High`, and `Max` change by selected model.
-- モデル権限設定。選択中のモデルに応じて、`Ask Every Time`、`Read Only`、`Workspace Write`、`Full Access`から選べる項目が変わります。
-  Model permission setting. Available choices among `Ask Every Time`, `Read Only`, `Workspace Write`, and `Full Access` change by selected model.
-- 5時間トークン残量と週間トークン残量のメーター、リフレッシュタイム表示。
-  5-hour and weekly token remaining meters with refresh-time display.
-- `.TRIGEN-Rules`自動生成ボタン。repo直下に既に存在する場合は無効化されます。
-  `.TRIGEN-Rules` generation button. It is disabled when the file already exists at the repository root.
+- `Login` / `Logout`ボタン。Loginは各プロバイダーの公式ログイン画面を外部ブラウザで開き、完了確認後に`Linked`として記録します。Cookieやセッショントークンは保存しません。
+  `Login` / `Logout` button. Login opens the provider's official login page in an external browser and records `Linked` after confirmation. Cookies and session tokens are not stored.
+- `Linked` / `Setup`ステータス。アカウント連携済みの場合はLinked、未連携の場合はSetupです。公式VS Code拡張の有無には依存しません。
+  `Linked` / `Setup` status. Linked means account linking is recorded, and Setup means linking is still needed. TRIGEN does not depend on official VS Code extension installation.
+- 動作モデル選択。例: `gpt-5.5`、`opus`、`gemini-3.5-flash`、`gemini-3.1-flash-lite`。
+  Model selection, for example `gpt-5.5`, `opus`, `gemini-3.5-flash`, and `gemini-3.1-flash-lite`.
+- 推論レベル選択。選択中のプロバイダーとモデルに応じて、`Low`、`Medium`、`High`、`X High`、`Max`、`Ultracode`、`Minimal`などから選べる項目が変わります。
+  Reasoning level selection. Available choices such as `Low`, `Medium`, `High`, `X High`, `Max`, `Ultracode`, and `Minimal` change by provider and model.
+- モデル権限設定。CodexはCLIのsandbox/approval境界、ClaudeはClaude Code permission mode、Geminiは利用可能な能力範囲をモデルごとに表示します。
+  Model permission setting. Codex maps to CLI sandbox/approval boundaries, Claude maps to Claude Code permission modes, and Gemini shows model capability scope.
+- 5時間トークン残量と週間トークン残量のメーター。公式の安定した取得口が無い場合は「公式取得口なし」と表示し、利用規約を回避する取得は行いません。
+  5-hour and weekly token remaining meters. If no stable provider reporting surface exists, TRIGEN shows an unavailable state and does not bypass provider terms.
+- `.TRIGEN-Rules`自動作成ボタン。repo直下に既に存在する場合は`作成済み`として無効化されます。
+  `.TRIGEN-Rules` create button. It is disabled as `作成済み` when the file already exists at the repository root.
 
-トークン残量は、プロバイダーが安定した取得手段を公開している場合はその報告値を表示する設計です。公開手段がない場合、TRIGENは未取得として表示し、利用規約を回避する取得は行いません。
-Token meters are designed to show provider-reported values when a stable provider surface is available. If no supported surface is available, TRIGEN shows the value as not reported and does not bypass provider terms.
+トークン残量は、プロバイダーが安定した取得手段を公開している場合はその報告値を表示する設計です。公開手段がない場合、TRIGENは残量を推測せず、ログイン済みブラウザの資格情報も読み取りません。
+Token meters are designed to show provider-reported values when a stable provider surface is available. If no supported surface is available, TRIGEN does not infer remaining quota or read credentials from logged-in browsers.
 
 ## 統合チャット / Unified Chat
 
@@ -53,10 +53,12 @@ The chat composer is one line when empty and shows `Send Message.` as the placeh
 
 - 上段: チャット入力欄。
   Upper area: message input.
-- 下段左端: `＋`ファイル添付ボタン。
-  Lower left: `+` file attachment button.
-- 下段右端: `↑`送信ボタン。
-  Lower right: `↑` send button.
+- 下段左端: VS Code標準アイコンのファイル添付ボタン。
+  Lower left: VS Code-standard file attachment icon button.
+- 下段中央: 小さな`TRIGEN-Orchestration`表示。
+  Lower center: compact `TRIGEN-Orchestration` label.
+- 下段右端: VS Code標準アイコンの送信ボタン。
+  Lower right: VS Code-standard send icon button.
 
 チャット入力欄にはモデル選択や権限選択を置きません。モデルや権限は左カラムのエージェント設定に集約します。
 The chat input does not contain model or permission selectors. Model and permission settings are centralized in the left settings view.
@@ -98,8 +100,8 @@ Use `.TRIGEN-Rules` for development policies, prohibitions, output formats, revi
    Open TRIGEN from the left Activity Bar and run Login for Codex, Claude, and Gemini.
 4. 各エージェントのモデル、推論レベル、権限を選択します。
    Select each agent's model, reasoning level, and permission.
-5. 右Secondary Side BarのTRIGENを開き、スレッドを選ぶか新規作成して、統合チャットに依頼を書いて`↑`で送信します。
-   Open TRIGEN in the right Secondary Side Bar, select or create a thread, write a request in the unified chat, and send with `↑`.
+5. 右Secondary Side BarのTRIGENを開き、スレッドを選ぶか新規作成して、統合チャットに依頼を書いて送信ボタンで実行します。
+   Open TRIGEN in the right Secondary Side Bar, select or create a thread, write a request in the unified chat, and run it with the send button.
 
 ## 開発 / Development
 

@@ -74,7 +74,13 @@ export function buildProviderPrompt(
     "",
     "Use the provider-side subscription account, official settings, and provider memory when they are available in the provider runtime. TRIGEN does not duplicate provider memory; it routes this unified chat context into the provider runtime.",
     "",
+    "## Execution Context",
+    "",
+    "This is not a passive chat relay. When the provider runtime and selected permission boundary allow it, work as a coding agent in this VS Code workspace: inspect files, edit files, run commands, and report concrete evidence.",
+    "",
     "## Workspace Rules",
+    "",
+    "Apply the loaded rule documents before orchestration heuristics. If .TRIGEN-Rules is present, treat it as the highest-priority repository-local TRIGEN rule file for Codex / Claude / Gemini coordination.",
     "",
     renderRuleBundle(ruleBundle),
     "",
@@ -88,7 +94,7 @@ export function buildProviderPrompt(
     "",
     "## Required Response",
     "",
-    "Answer as a coding agent working on this repository. Be concrete, cite files when relevant, and separate completed work from risks or required follow-up."
+    "Answer as a coding agent working on this repository. Be concrete, cite files when relevant, and separate completed work from risks or required follow-up. If you changed files or ran checks, include the evidence."
   ].join("\n");
 }
 

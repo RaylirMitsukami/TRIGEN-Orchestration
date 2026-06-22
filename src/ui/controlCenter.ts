@@ -4,18 +4,22 @@ import * as vscode from "vscode";
 import { DEFAULT_TRIGEN_DISPLAY_CONFIG } from "../core/rules";
 import type {
   AgentRuntimeSettings,
-  ModelPermission,
   OrchestrationResult,
   ProviderControlState,
   ProviderHealth,
   ProviderId,
-  ReasoningLevel,
   RuleBundle,
   TrigenDisplayConfig,
   TrigenRulesStatus
 } from "../core/types";
 
 const CHAT_THREADS_KEY = "trigen.chatThreads";
+const SYSTEM_INTRO_TEXT = [
+  "TRIGEN-Orchestration統合窓です。",
+  ".TRIGEN-Rulesとワークスペース規則を優先して読み込みます。",
+  "各エージェントは左の設定で選んだモデル・推論・権限境界に従います。",
+  "CLIが有効なエージェントはrepo内の読取・編集・実行まで担当します。"
+].join("\n");
 
 export interface IntegratedDispatchResult extends OrchestrationResult {
   readonly routeSummary: string;
@@ -28,7 +32,7 @@ export interface TrigenViewDelegate {
   getDisplayConfig(): Promise<TrigenDisplayConfig>;
   healthCheck(): Promise<readonly ProviderHealth[]>;
   loadRules(): Promise<RuleBundle>;
-  login(providerId: ProviderId): Promise<void>;
+  login(providerId: ProviderId): Promise<boolean>;
   logout(providerId: ProviderId): Promise<void>;
   updateAgentSettings(providerId: ProviderId, settings: Partial<AgentRuntimeSettings>): Promise<void>;
   dispatchImplicit(prompt: string, attachments: readonly string[]): Promise<IntegratedDispatchResult>;
@@ -138,8 +142,10 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
 
     if (message.type === "login") {
       this.setBusy(true, "ブラウザでログイン画面を開いています / Opening browser login...");
-      await this.delegate.login(message.providerId);
-      await this.refresh("ログイン連携を記録しました / Login link recorded.");
+      const linked = await this.delegate.login(message.providerId);
+      await this.refresh(linked
+        ? "ログイン連携を記録しました / Login link recorded."
+        : "ログイン連携は未変更です / Login link unchanged.");
       return;
     }
 
@@ -179,14 +185,16 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
   private renderHtml(webview: vscode.Webview): string {
     const nonce = cryptoNonce();
     const cspSource = webview.cspSource;
+    const codiconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", "codicon.ttf"));
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${cspSource}; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <title>TRIGEN-Orchestration</title>
   <style>
+    ${codiconCss(codiconUri)}
     :root {
       --bg: var(--vscode-sideBar-background);
       --panel: var(--vscode-editorWidget-background);
@@ -346,11 +354,6 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     }
     progress.five { accent-color: var(--five); }
     progress.weekly { accent-color: var(--weekly); }
-    .context {
-      color: var(--muted);
-      margin-top: 6px;
-      font-size: 10px;
-    }
     .rulesBox {
       margin-top: 9px;
       border-top: 1px solid var(--border);
@@ -371,20 +374,35 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     }
     .refresh {
       white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 76px;
+      justify-content: center;
+    }
+    .tokenUnavailable {
+      color: var(--muted);
+    }
+    .meterNote {
+      color: var(--muted);
+      font-size: 10px;
     }
   </style>
 </head>
 <body>
   <header>
     <h1>TRIGEN-Orchestration</h1>
-    <button id="refresh" class="refresh">更新 <span class="enInline">Refresh</span></button>
+    <button id="refresh" class="refresh primary" title="状態を更新 / Refresh">
+      <span class="codicon codicon-refresh" aria-hidden="true"></span>
+      <span>更新</span>
+    </button>
   </header>
   <div id="status" class="statusLine"></div>
   <div id="agents" class="agents"></div>
   <section class="rulesBox">
     <div class="rulesActions">
       <strong>.TRIGEN-Rules</strong>
-      <button id="createRules">自動生成 <span class="enInline">Generate</span></button>
+      <button id="createRules" class="primary">自動作成</button>
     </div>
     <div id="rulesHelp" class="small"></div>
   </section>
@@ -439,13 +457,13 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
             <label>
               <span class="labelText"><span>推論</span><span class="enInline">Reasoning</span></span>
               <select data-setting="reasoningLevel" data-provider="\${provider.id}">
-                \${provider.reasoningOptions.map(option => \`<option value="\${escapeAttr(option)}" \${option === provider.settings.reasoningLevel ? 'selected' : ''}>\${reasoningLabel(option)}</option>\`).join('')}
+                \${provider.reasoningOptions.map(option => \`<option value="\${escapeAttr(option.id)}" title="\${escapeAttr(option.description || '')}" \${option.id === provider.settings.reasoningLevel ? 'selected' : ''}>\${escapeHtml(option.label)}</option>\`).join('')}
               </select>
             </label>
             <label>
               <span class="labelText"><span>権限</span><span class="enInline">Permission</span></span>
               <select data-setting="permission" data-provider="\${provider.id}">
-                \${provider.permissionOptions.map(option => \`<option value="\${escapeAttr(option)}" \${option === provider.settings.permission ? 'selected' : ''}>\${permissionLabel(option)}</option>\`).join('')}
+                \${provider.permissionOptions.map(option => \`<option value="\${escapeAttr(option.id)}" title="\${escapeAttr(option.description || '')}" \${option.id === provider.settings.permission ? 'selected' : ''}>\${escapeHtml(option.label)}</option>\`).join('')}
               </select>
             </label>
           </div>
@@ -453,18 +471,14 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
             \${meter('five', '5時間', '5h', provider.usage.fiveHourRemainingPercent, provider.usage.fiveHourRefreshAt, provider.linked)}
             \${meter('weekly', '週間', 'Weekly', provider.usage.weeklyRemainingPercent, provider.usage.weeklyRefreshAt, provider.linked)}
           </div>
-          <div class="context">
-            \${provider.webContextStatus === 'available-through-provider'
-              ? 'Web版設定・メモリは公式ランタイム側で使用 / Web settings and memory are used through the provider runtime.'
-              : 'Loginで公式アカウント連携を開始 / Login starts official account linking.'}
-          </div>
         \`;
         agentsEl.appendChild(item);
       }
 
       const exists = !!state.ruleStatus?.exists;
       createRulesButton.disabled = !!state.busy || exists;
-      createRulesButton.textContent = exists ? '作成済み / Exists' : '自動生成 / Generate';
+      createRulesButton.classList.toggle('primary', !exists);
+      createRulesButton.textContent = exists ? '作成済み' : '自動作成';
       rulesHelpEl.textContent = exists
         ? '.TRIGEN-Rulesを最優先で読み込みます。エージェント名・色・共通ルールを編集できます。 / Loaded first. Edit agent names, colors, and shared rules.'
         : '.TRIGEN-Rulesをrepo直下に作成します。3エージェント共通の優先ルールを書けます。 / Creates .TRIGEN-Rules at the repo root for shared priority rules.';
@@ -493,38 +507,24 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     }
 
     function statusLabel(status) {
-      if (status === 'ready') return 'Ready';
+      if (status === 'ready') return 'Linked';
       if (status === 'linked') return 'Linked';
       return 'Setup';
-    }
-
-    function reasoningLabel(value) {
-      if (value === 'extra-high') return 'Extra High';
-      if (value === 'max') return 'Max';
-      return value.charAt(0).toUpperCase() + value.slice(1);
-    }
-
-    function permissionLabel(value) {
-      if (value === 'ask-every-time') return 'Ask Every Time';
-      if (value === 'read-only') return 'Read Only';
-      if (value === 'workspace-write') return 'Workspace Write';
-      if (value === 'full-access') return 'Full Access';
-      return value;
     }
 
     function meter(kind, ja, en, value, refreshAt, linked) {
       const hasValue = Number.isFinite(value);
       const percent = hasValue ? value : 0;
-      const label = hasValue ? \`\${value}%\` : linked ? '未取得 / Not reported' : '未連携 / Not linked';
-      const refresh = refreshAt || (linked ? '公式側の報告待ち / Waiting for provider' : 'Login後に更新 / Refresh after login');
+      const label = hasValue ? \`\${value}%\` : linked ? '公式取得口なし' : '未連携';
+      const note = refreshAt || (linked ? '公式の安定した残量APIが無い場合は保存しません。' : 'Login後に連携状態を確認します。');
       return \`
         <div>
           <div class="meterTop">
             <span>\${ja} <span class="enInline">\${en}</span></span>
-            <span>\${escapeHtml(label)}</span>
+            <span class="\${hasValue ? '' : 'tokenUnavailable'}">\${escapeHtml(label)}</span>
           </div>
           <progress class="\${kind}" max="100" value="\${percent}"></progress>
-          <div class="small">Refresh: \${escapeHtml(refresh)}</div>
+          <div class="meterNote">\${escapeHtml(note)}</div>
         </div>
       \`;
     }
@@ -674,7 +674,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
         {
           id: newId("msg"),
           role: "system",
-          text: "3エージェント統合チャットです。Codex / Claude / Gemini は、このスレッド文脈だけを共有します。",
+          text: SYSTEM_INTRO_TEXT,
           timestamp: now
         }
       ]
@@ -859,14 +859,16 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
   private renderHtml(webview: vscode.Webview): string {
     const nonce = cryptoNonce();
     const cspSource = webview.cspSource;
+    const codiconUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", "codicon.ttf"));
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${cspSource}; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <title>TRIGEN Unified Chat</title>
   <style>
+    ${codiconCss(codiconUri)}
     :root {
       --bg: var(--vscode-sideBar-background);
       --panel: var(--vscode-editorWidget-background);
@@ -919,10 +921,8 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       font-weight: 700;
     }
     .statusText {
-      min-height: 24px;
       padding: 5px 10px;
       color: var(--muted);
-      border-bottom: 1px solid var(--border);
       font-size: 11px;
     }
     .threadList {
@@ -979,6 +979,17 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     .bubble.trigen {
       border-color: var(--accent);
     }
+    .bubble.system {
+      padding: 6px 8px;
+      color: var(--muted);
+    }
+    .bubble.system .messageHead {
+      margin-bottom: 3px;
+      font-size: 11px;
+    }
+    .bubble.system .messageText {
+      line-height: 1.34;
+    }
     .messageHead {
       margin-bottom: 5px;
       font-size: 12px;
@@ -1030,10 +1041,19 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       font-size: 11px;
     }
     .bar {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
       align-items: center;
       gap: 8px;
+    }
+    .composerBrand {
+      color: var(--muted);
+      font-size: 10px;
+      text-align: center;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     button {
       border: 0;
@@ -1047,19 +1067,26 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       cursor: pointer;
     }
     button.icon {
-      font-size: 14px;
-      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button.attach {
+      border: 1px solid var(--border);
+      background: var(--input);
+      color: var(--text);
     }
     button.send {
       background: var(--accent);
       color: var(--accentText);
-      font-weight: 700;
     }
     button.copy {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       min-width: 24px;
       min-height: 22px;
       padding: 0 6px;
-      font-size: 11px;
     }
     button:disabled, textarea:disabled {
       opacity: 0.55;
@@ -1120,9 +1147,9 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       return \`
         <div class="statusBar threadsBar">
           <div class="title">Threads</div>
-          <button class="icon" data-action="newThread" title="新しいスレッド / New thread">□🖊️</button>
+          <button class="icon" data-action="newThread" title="新しいスレッド / New thread" aria-label="New thread"><span class="codicon codicon-edit" aria-hidden="true"></span></button>
         </div>
-        <div class="statusText">\${escapeHtml(state.message || '')}</div>
+        \${state.message ? \`<div class="statusText">\${escapeHtml(state.message)}</div>\` : ''}
         <main class="threadList">
           \${state.threads.length === 0 ? '<div class="empty">スレッドはまだありません。右上のボタンで作成します。<br>No threads yet. Create one from the top-right button.</div>' : ''}
           \${state.threads.map(thread => \`
@@ -1139,16 +1166,16 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     function renderThread(thread) {
       return \`
         <div class="statusBar">
-          <button class="icon" data-action="backToThreads" title="戻る / Back">←</button>
+          <button class="icon" data-action="backToThreads" title="戻る / Back" aria-label="Back"><span class="codicon codicon-arrow-left" aria-hidden="true"></span></button>
           <div class="title">\${escapeHtml(thread.title)}</div>
-          <button class="icon" id="optionsButton" title="オプション / Options">…</button>
-          <button class="icon" data-action="newThread" title="新しいスレッド / New thread">□🖊️</button>
+          <button class="icon" id="optionsButton" title="オプション / Options" aria-label="Options"><span class="codicon codicon-ellipsis" aria-hidden="true"></span></button>
+          <button class="icon" data-action="newThread" title="新しいスレッド / New thread" aria-label="New thread"><span class="codicon codicon-edit" aria-hidden="true"></span></button>
           <div id="optionMenu" class="optionMenu \${optionsOpen ? 'open' : ''}">
             <button data-action="renameThread">スレッド名を変更</button>
             <button data-action="exportThread">Markdownに出力</button>
           </div>
         </div>
-        <div class="statusText">\${escapeHtml(state.message || '')}</div>
+        \${state.message ? \`<div class="statusText">\${escapeHtml(state.message)}</div>\` : ''}
         <main id="messages" class="messages">
           \${thread.messages.map(message => renderMessage(message)).join('')}
         </main>
@@ -1156,12 +1183,13 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
           <textarea id="prompt" rows="1" placeholder="Send Message."></textarea>
           <div id="attachments" class="attachments">
             \${state.attachments.map(path => \`
-              <div class="attachment"><span>\${escapeHtml(path)}</span><button data-clear="\${escapeAttr(path)}">×</button></div>
+              <div class="attachment"><span>\${escapeHtml(path)}</span><button class="icon" data-clear="\${escapeAttr(path)}" title="添付を外す / Remove attachment" aria-label="Remove attachment"><span class="codicon codicon-close" aria-hidden="true"></span></button></div>
             \`).join('')}
           </div>
           <div class="bar">
-            <button id="attach" class="icon" title="ファイル添付 / Attach files">＋</button>
-            <button id="send" class="send" title="送信 / Send">↑</button>
+            <button id="attach" class="icon attach" title="ファイル添付 / Attach files" aria-label="Attach files"><span class="codicon codicon-add" aria-hidden="true"></span></button>
+            <div class="composerBrand">TRIGEN-Orchestration</div>
+            <button id="send" class="icon send" title="送信 / Send" aria-label="Send"><span class="codicon codicon-arrow-up" aria-hidden="true"></span></button>
           </div>
         </section>
       \`;
@@ -1178,7 +1206,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
           <div class="messageText">\${escapeHtml(message.text)}</div>
           <div class="messageFooter">
             <span>\${escapeHtml(formatFullTime(message.timestamp))}</span>
-            <button class="copy" data-copy="\${escapeAttr(message.id)}" title="コピー / Copy">□</button>
+            <button class="copy" data-copy="\${escapeAttr(message.id)}" title="コピー / Copy" aria-label="Copy"><span class="codicon codicon-copy" aria-hidden="true"></span></button>
           </div>
         </article>
       \`;
@@ -1282,7 +1310,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return value;
       const pad = number => String(number).padStart(2, '0');
-      return \`\${date.getFullYear()}/\${pad(date.getMonth() + 1)}/\${pad(date.getDate())}/\${pad(date.getHours())}/\${pad(date.getMinutes())}/\${pad(date.getSeconds())}\`;
+      return \`\${date.getFullYear()} / \${pad(date.getMonth() + 1)} / \${pad(date.getDate())} / \${pad(date.getHours())} : \${pad(date.getMinutes())} . \${pad(date.getSeconds())}\`;
     }
 
     function sanitizeColor(value) {
@@ -1368,21 +1396,13 @@ function settingPatch(key: keyof AgentRuntimeSettings, value: string): Partial<A
   if (key === "model") {
     return { model: value };
   }
-  if (key === "reasoningLevel" && isReasoningLevel(value)) {
+  if (key === "reasoningLevel") {
     return { reasoningLevel: value };
   }
-  if (key === "permission" && isModelPermission(value)) {
+  if (key === "permission") {
     return { permission: value };
   }
   return undefined;
-}
-
-function isReasoningLevel(value: string): value is ReasoningLevel {
-  return value === "low" || value === "medium" || value === "high" || value === "extra-high" || value === "max";
-}
-
-function isModelPermission(value: string): value is ModelPermission {
-  return value === "ask-every-time" || value === "read-only" || value === "workspace-write" || value === "full-access";
 }
 
 function isProviderId(value: unknown): value is ProviderId {
@@ -1463,7 +1483,37 @@ function formatLocalTimestamp(value: string): string {
     return value;
   }
   const pad = (number: number) => String(number).padStart(2, "0");
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}/${pad(date.getHours())}/${pad(date.getMinutes())}/${pad(date.getSeconds())}`;
+  return `${date.getFullYear()} / ${pad(date.getMonth() + 1)} / ${pad(date.getDate())} / ${pad(date.getHours())} : ${pad(date.getMinutes())} . ${pad(date.getSeconds())}`;
+}
+
+function codiconCss(codiconUri: vscode.Uri): string {
+  return `
+    @font-face {
+      font-family: "codicon";
+      src: url("${codiconUri.toString()}") format("truetype");
+      font-display: block;
+    }
+    .codicon {
+      display: inline-block;
+      font: normal normal normal 16px/1 "codicon";
+      text-rendering: auto;
+      -webkit-font-smoothing: antialiased;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .codicon-add:before { content: "\\ea60"; }
+    .codicon-arrow-left:before { content: "\\ea9b"; }
+    .codicon-arrow-up:before { content: "\\eaa1"; }
+    .codicon-attach:before { content: "\\ec34"; }
+    .codicon-check:before { content: "\\eab2"; }
+    .codicon-close:before { content: "\\ea76"; }
+    .codicon-copy:before { content: "\\ebcc"; }
+    .codicon-edit:before { content: "\\ea73"; }
+    .codicon-ellipsis:before { content: "\\ea7c"; }
+    .codicon-link-external:before { content: "\\eb14"; }
+    .codicon-refresh:before { content: "\\eb37"; }
+    .codicon-send:before { content: "\\ec0f"; }
+  `;
 }
 
 function safeFileName(value: string): string {

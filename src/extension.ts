@@ -17,7 +17,6 @@ import { buildProviderPrompt, inferDispatchMode, orchestrate } from "./core/orch
 import type {
   AgentRuntimeSettings,
   DispatchMode,
-  ModelPermission,
   OrchestrationRequest,
   OrchestrationResult,
   ProviderControlState,
@@ -26,7 +25,6 @@ import type {
   ProviderRunRequest,
   ProviderRunResult,
   ProviderUsageWindow,
-  ReasoningLevel,
   RuleBundle,
   TrigenDisplayConfig,
   TrigenRulesStatus,
@@ -95,7 +93,7 @@ class TrigenController {
         label: provider.label,
         shortLabel: provider.shortLabel,
         linked: isLinked,
-        status: providerHealth.ready ? "ready" : isLinked ? "linked" : "setup",
+        status: isLinked ? "linked" : "setup",
         health: providerHealth,
         settings: providerSettings,
         usage: this.usageWindow(provider.id, isLinked),
@@ -109,10 +107,20 @@ class TrigenController {
     });
   }
 
-  async login(providerId: ProviderId): Promise<void> {
+  async login(providerId: ProviderId): Promise<boolean> {
     const provider = getProviderDefinition(providerId);
     await vscode.env.openExternal(vscode.Uri.parse(provider.loginUrl));
-    await this.setLinked(providerId, true);
+    const confirmation = await vscode.window.showInformationMessage(
+      `${provider.label} の公式ログイン画面を開きました。ログイン完了後に連携済みにしてください。TRIGEN-Orchestration はCookieやセッショントークンを保存しません。`,
+      { modal: true },
+      "連携済みにする",
+      "キャンセル"
+    );
+    if (confirmation === "連携済みにする") {
+      await this.setLinked(providerId, true);
+      return true;
+    }
+    return false;
   }
 
   async logout(providerId: ProviderId): Promise<void> {
@@ -209,23 +217,15 @@ class TrigenController {
       ? [configuredCommand.trim()]
       : provider.commandCandidates;
     const cliPath = await resolveExecutable(commandCandidates);
-    const extensionId = provider.officialExtensionIds.find((id) => vscode.extensions.getExtension(id));
     const notes: string[] = [];
-    const accountNotes = await this.authenticationNotes(provider.authProviderIds);
 
-    if (provider.officialExtensionIds.length > 0) {
-      notes.push(extensionId ? `Official extension detected: ${extensionId}` : "Official extension not detected.");
-    } else {
-      notes.push("Official VS Code extension is not required for this provider path.");
-    }
-    notes.push(...accountNotes);
+    notes.push("Official VS Code extension dependency is disabled; link the provider through its official browser login.");
     notes.push(cliPath ? `CLI detected: ${cliPath}` : `CLI not detected. Configure trigen.providers.${providerId}.command when installed.`);
 
     return {
       id: providerId,
       label: provider.label,
-      extensionInstalled: Boolean(extensionId),
-      extensionId,
+      extensionInstalled: false,
       cliPath,
       configuredCommand: configuredCommand || undefined,
       ready: Boolean(cliPath),
@@ -235,8 +235,12 @@ class TrigenController {
 
   private async providersForUnifiedChat(): Promise<readonly ProviderId[]> {
     const state = await this.getControlState();
-    const linkedOrReady = state.filter((item) => item.linked || item.health.ready).map((item) => item.id);
-    return linkedOrReady.length > 0 ? linkedOrReady : PROVIDERS.map((provider) => provider.id);
+    const linkedAndRunnable = state.filter((item) => item.linked && item.health.ready).map((item) => item.id);
+    if (linkedAndRunnable.length > 0) {
+      return linkedAndRunnable;
+    }
+    const linked = state.filter((item) => item.linked).map((item) => item.id);
+    return linked.length > 0 ? linked : PROVIDERS.map((provider) => provider.id);
   }
 
   private async runProvider(request: ProviderRunRequest): Promise<ProviderRunResult> {
@@ -262,8 +266,13 @@ class TrigenController {
     const config = vscode.workspace.getConfiguration("trigen");
     const configuredArgs = config.get<string[]>(`providers.${request.providerId}.args`, [...provider.defaultArgs]);
     const timeoutMs = config.get<number>("execution.timeoutMs", 600000);
+    const settings = normalizeSettings(request.providerId, this.agentSettings()[request.providerId]);
     const args = expandArgs(configuredArgs, {
-      workspaceFolder: request.workspaceFolder
+      workspaceFolder: request.workspaceFolder,
+      model: settings.model,
+      reasoningLevel: settings.reasoningLevel,
+      permission: settings.permission,
+      ...providerExecutionVariables(request.providerId, settings)
     });
 
     this.output.appendLine(`[TRIGEN] Running ${provider.label}: ${health.cliPath} ${args.join(" ")}`);
@@ -325,25 +334,8 @@ class TrigenController {
       return { source: "unavailable" };
     }
     return {
-      source: "unavailable",
-      fiveHourRefreshAt: "Provider reported time unavailable",
-      weeklyRefreshAt: "Provider reported time unavailable"
+      source: "unavailable"
     };
-  }
-
-  private async authenticationNotes(authProviderIds: readonly string[]): Promise<readonly string[]> {
-    const notes: string[] = [];
-    for (const authProviderId of authProviderIds) {
-      try {
-        const accounts = await vscode.authentication.getAccounts(authProviderId);
-        if (accounts.length > 0) {
-          notes.push(`Authentication account detected via ${authProviderId}: ${accounts.length}`);
-        }
-      } catch {
-        // Most providers do not expose a stable VS Code Authentication provider.
-      }
-    }
-    return notes;
   }
 }
 
@@ -362,23 +354,53 @@ function normalizeSettings(providerId: ProviderId, value: Partial<AgentRuntimeSe
     ? value.model
     : provider.defaultModel;
   const modelProfile = getModelProfile(providerId, model);
+  const reasoningLevel = value?.reasoningLevel && modelProfile.reasoningLevels.some((item) => item.id === value.reasoningLevel)
+    ? value.reasoningLevel
+    : modelProfile.defaultReasoningLevel;
+  const permission = value?.permission && modelProfile.permissions.some((item) => item.id === value.permission)
+    ? value.permission
+    : modelProfile.defaultPermission;
   return {
     model,
-    reasoningLevel: isReasoningLevel(value?.reasoningLevel) && modelProfile.reasoningLevels.includes(value.reasoningLevel)
-      ? value.reasoningLevel
-      : modelProfile.defaultReasoningLevel,
-    permission: isModelPermission(value?.permission) && modelProfile.permissions.includes(value.permission)
-      ? value.permission
-      : modelProfile.defaultPermission
+    reasoningLevel,
+    permission
   };
 }
 
-function isReasoningLevel(value: unknown): value is ReasoningLevel {
-  return value === "low" || value === "medium" || value === "high" || value === "extra-high" || value === "max";
+function providerExecutionVariables(providerId: ProviderId, settings: AgentRuntimeSettings): Record<string, string> {
+  if (providerId === "codex") {
+    const [codexSandbox, codexApproval] = codexPermissionFlags(settings.permission);
+    return {
+      codexSandbox,
+      codexApproval
+    };
+  }
+  if (providerId === "claude") {
+    return {
+      claudeModel: settings.model,
+      claudeEffort: settings.reasoningLevel,
+      claudePermissionMode: settings.permission
+    };
+  }
+  return {
+    geminiModel: settings.model,
+    geminiThinkingLevel: settings.reasoningLevel,
+    geminiCapability: settings.permission
+  };
 }
 
-function isModelPermission(value: unknown): value is ModelPermission {
-  return value === "ask-every-time" || value === "read-only" || value === "workspace-write" || value === "full-access";
+function codexPermissionFlags(permission: string): readonly [string, string] {
+  switch (permission) {
+    case "read-only-on-request":
+      return ["read-only", "on-request"];
+    case "workspace-write-untrusted":
+      return ["workspace-write", "untrusted"];
+    case "workspace-write-never":
+      return ["workspace-write", "never"];
+    case "workspace-write-on-request":
+    default:
+      return ["workspace-write", "on-request"];
+  }
 }
 
 function enrichUnifiedPrompt(
@@ -394,6 +416,8 @@ function enrichUnifiedPrompt(
     "- This request comes from the single TRIGEN 3-agent unified chat window.",
     "- Do not assume a separate per-agent chat context.",
     "- Use only this unified chat context plus the workspace rule bundle as the shared context.",
+    "- Treat .TRIGEN-Rules and the loaded workspace rule documents as the highest-priority repository-local rules.",
+    "- When a provider CLI is available, this is a coding-agent dispatch: read, edit, and run repository tasks within the selected permission boundary.",
     "- Provider-side subscription account settings and memory should be respected through the provider runtime when available.",
     "",
     "## Agent Runtime Selection",

@@ -16,11 +16,11 @@ It does not create dedicated per-agent chat windows. Shared context is centraliz
 TRIGEN内部には、直列、並列、グループチャット、自律型ハンドオフの実行経路があります。ただし、ユーザーが明示的にモードを選ぶUIではありません。統合チャット内の指示や文脈から、TRIGENが内部処理経路を選択します。
 TRIGEN internally supports serial, parallel, group chat, and autonomous handoff routes. The user does not select these through explicit mode buttons. TRIGEN chooses the internal route from the unified chat instruction and context.
 
-左カラムの`TRIGEN-Orchestration`設定画面では、Codex、Claude、Geminiを上から順に表示します。各カードにはLogin/Logout、Ready/Linked/Setupステータス、モデル選択、推論レベル、権限設定、5時間/週間トークン残量メーターを配置します。
-The left-column `TRIGEN-Orchestration` settings view lists Codex, Claude, and Gemini in order. Each card includes Login/Logout, Ready/Linked/Setup status, model selection, reasoning level, permission settings, and 5-hour/weekly token meters.
+左カラムの`TRIGEN-Orchestration`設定画面では、Codex、Claude、Geminiを上から順に表示します。各カードにはLogin/Logout、Linked/Setupステータス、モデル選択、推論レベル、権限設定、5時間/週間トークン残量メーターを配置します。
+The left-column `TRIGEN-Orchestration` settings view lists Codex, Claude, and Gemini in order. Each card includes Login/Logout, Linked/Setup status, model selection, reasoning level, permission settings, and 5-hour/weekly token meters.
 
-右カラムの統合チャット入力欄は、上段が入力欄、下段左端が`＋`添付ボタン、下段右端が`↑`送信ボタンです。チャット入力欄にはモデル選択や権限選択を置かず、エージェント設定に集約します。
-The right-column chat composer has a top message input, a lower-left `+` attachment button, and a lower-right `↑` send button. Model and permission selectors are not placed in the chat input; they are centralized in the agent settings.
+右カラムの統合チャット入力欄は、上段が入力欄、下段左端がVS Code標準アイコンの添付ボタン、下段中央が`TRIGEN-Orchestration`表示、下段右端がVS Code標準アイコンの送信ボタンです。チャット入力欄にはモデル選択や権限選択を置かず、エージェント設定に集約します。
+The right-column chat composer has a top message input, a lower-left VS Code-standard attachment icon button, a lower-center `TRIGEN-Orchestration` label, and a lower-right VS Code-standard send icon button. Model and permission selectors are not placed in the chat input; they are centralized in the agent settings.
 
 ワークスペースrepo内に`.TRIGEN-Rules`を置くと、TRIGENはそれを3エージェント連携の最優先ルールとして読み込みます。
 If `.TRIGEN-Rules` exists in the workspace repository, TRIGEN loads it as the highest-priority rule file for 3-agent orchestration.

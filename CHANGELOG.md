@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.2
+
+- Replaced literal toolbar glyphs with bundled VS Code Codicons in the settings and unified chat webviews.
+- Removed official VS Code extension dependency checks and switched provider linking to browser-login confirmation without storing cookies or session tokens.
+- Updated model, reasoning, and permission profiles for Codex, Claude Code, and Gemini, including `gemini-3.5-flash` and `gemini-3.1-flash-lite`.
+- Routed Codex model/reasoning/permission settings into CLI execution arguments.
+- Clarified unavailable provider quota reporting without unsupported scraping or credential access.
+- Tightened `.TRIGEN-Rules` priority wording in templates and provider dispatch prompts.
+- Updated timestamps to `YYYY / MM / DD / hh : mm . ss` format and compacted the unified chat chrome.
+
 ## 0.1.1
 
 - Repackaged the refined TRIGEN UI and rules implementation as a distinct installable version so VS Code cannot keep showing the stale 0.1.0 extension.

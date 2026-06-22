@@ -2,7 +2,7 @@
   "name": "trigen-orchestration",
   "displayName": "TRIGEN-Orchestration",
   "description": "Codex、Claude、Geminiを1つの統合チャットで扱うVS Code用3エージェント・オーケストレーション拡張。",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "RaylirMitsukami",
   "license": "MIT",
   "private": false,
@@ -83,12 +83,20 @@
             "--skip-git-repo-check",
             "-C",
             "${workspaceFolder}",
+            "--model",
+            "${model}",
+            "-c",
+            "model_reasoning_effort=\"${reasoningLevel}\"",
+            "--sandbox",
+            "${codexSandbox}",
+            "--ask-for-approval",
+            "${codexApproval}",
             "-"
           ],
           "items": {
             "type": "string"
           },
-          "description": "Arguments used when TRIGEN dispatches to Codex. The prompt is sent on stdin."
+          "description": "Arguments used when TRIGEN dispatches to Codex. The prompt is sent on stdin. Variables include workspaceFolder, model, reasoningLevel, permission, codexSandbox, and codexApproval."
         },
         "trigen.providers.claude.command": {
           "type": "string",
