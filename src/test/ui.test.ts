@@ -25,6 +25,14 @@ describe("control center UI source", () => {
     assert.match(source, /deleteThread/);
     assert.match(source, /showWarningMessage/);
     assert.match(source, /スレッドを削除/);
+    assert.equal(source.includes('"キャンセル"'), false);
+  });
+
+  it("renders provider status logs outside the chat transcript", () => {
+    assert.match(source, /Status Info/);
+    assert.match(source, /copyStatusLog/);
+    assert.match(source, /cleanProviderOutput/);
+    assert.match(source, /extractCodexAgentText/);
   });
 
   it("does not render old literal text controls or dead quota labels", () => {
@@ -37,7 +45,9 @@ describe("control center UI source", () => {
       "□🖊️",
       "Web版設定",
       "Not reported",
-      "Provider reported time unavailable"
+      "Provider reported time unavailable",
+      "公式の安定した残量APIが無い場合は保存しません。",
+      "gemini-3.5-flash"
     ]) {
       assert.equal(source.includes(fragment), false, fragment);
     }

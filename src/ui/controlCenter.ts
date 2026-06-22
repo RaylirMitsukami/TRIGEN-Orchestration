@@ -34,6 +34,7 @@ export interface TrigenViewDelegate {
   login(providerId: ProviderId): Promise<boolean>;
   logout(providerId: ProviderId): Promise<void>;
   updateAgentSettings(providerId: ProviderId, settings: Partial<AgentRuntimeSettings>): Promise<void>;
+  copyProviderStatusLog(providerId: ProviderId): Promise<void>;
   dispatchImplicit(prompt: string, attachments: readonly string[]): Promise<IntegratedDispatchResult>;
 }
 
@@ -41,6 +42,7 @@ interface SettingsViewState {
   readonly providers: readonly ProviderControlState[];
   readonly ruleStatus?: TrigenRulesStatus;
   readonly busy: boolean;
+  readonly refreshing: boolean;
   readonly message?: string;
 }
 
@@ -73,7 +75,8 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private state: SettingsViewState = {
     providers: [],
-    busy: false
+    busy: false,
+    refreshing: false
   };
 
   constructor(
@@ -98,8 +101,11 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     await vscode.commands.executeCommand("trigen.settings.focus");
   }
 
-  async refresh(message = "更新しました / Refreshed."): Promise<void> {
-    this.setBusy(true, message);
+  async refresh(message = "更新しました / Refreshed.", options: { showBusy?: boolean; refreshButton?: boolean } = {}): Promise<void> {
+    const showBusy = options.showBusy ?? true;
+    if (showBusy) {
+      this.setBusy(true, message, options.refreshButton ?? false);
+    }
     try {
       const [providers, ruleStatus] = await Promise.all([
         this.delegate.getControlState(),
@@ -109,6 +115,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
         providers,
         ruleStatus,
         busy: false,
+        refreshing: false,
         message
       };
       this.postState();
@@ -116,6 +123,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       this.state = {
         ...this.state,
         busy: false,
+        refreshing: false,
         message: errorMessage(error)
       };
       this.postState();
@@ -128,7 +136,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     }
 
     if (message.type === "refresh") {
-      await this.refresh("状態を更新しました / Status refreshed.");
+      await this.refresh("状態を更新しました / Status refreshed.", { refreshButton: true });
       return;
     }
 
@@ -162,13 +170,24 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       }
       await this.delegate.updateAgentSettings(message.providerId, patch);
       await this.refresh("設定を保存しました / Settings saved.");
+      return;
+    }
+
+    if (message.type === "copyStatusLog") {
+      await this.delegate.copyProviderStatusLog(message.providerId);
+      this.state = {
+        ...this.state,
+        message: "ステータスログをコピーしました / Status log copied."
+      };
+      this.postState();
     }
   }
 
-  private setBusy(busy: boolean, message?: string): void {
+  private setBusy(busy: boolean, message?: string, refreshing = false): void {
     this.state = {
       ...this.state,
       busy,
+      refreshing,
       message: message ?? this.state.message
     };
     this.postState();
@@ -210,6 +229,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       --five: var(--vscode-charts-blue, #4fc1ff);
       --weekly: #40c6a3;
       --warn: #d8a657;
+      --active: #4fc1ff;
     }
     * { box-sizing: border-box; }
     body {
@@ -232,6 +252,18 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       line-height: 1.15;
       font-weight: 700;
       letter-spacing: 0;
+    }
+    .headerActions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .refreshLoading {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1;
+      min-width: 48px;
+      text-align: right;
     }
     .en,
     .enInline {
@@ -302,6 +334,14 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       background: var(--accent);
       color: var(--accentText);
     }
+    button:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+    button:active:not(:disabled) {
+      background: var(--active);
+      color: #06131a;
+      transform: translateY(1px);
+    }
     button:disabled, select:disabled {
       opacity: 0.45;
       cursor: default;
@@ -336,8 +376,8 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     }
     .meters {
       display: grid;
-      gap: 5px;
-      margin-top: 6px;
+      gap: 3px;
+      margin-top: 5px;
     }
     .meterTop {
       display: flex;
@@ -348,7 +388,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     }
     progress {
       width: 100%;
-      height: 7px;
+      height: 6px;
       border-radius: 999px;
     }
     progress.five { accent-color: var(--five); }
@@ -392,18 +432,65 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     .tokenUnavailable {
       color: var(--muted);
     }
-    .meterNote {
+    .statusPanel {
+      margin-top: 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #050505;
+    }
+    .statusPanelHead {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+      padding: 3px 5px;
       color: var(--muted);
       font-size: 10px;
+    }
+    .statusCopy {
+      min-width: 22px;
+      min-height: 20px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      color: var(--muted);
+    }
+    .statusCopy:hover:not(:disabled),
+    .statusCopy:focus-visible {
+      background: rgba(79, 193, 255, 0.22);
+      color: var(--text);
+      outline: none;
+    }
+    .statusLog {
+      margin: 0;
+      min-height: 52px;
+      max-height: 52px;
+      overflow-y: auto;
+      padding: 5px;
+      color: #a6a6a6;
+      background: #050505;
+      font: 10px/1.3 var(--vscode-editor-font-family);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .emptyLog {
+      color: var(--muted);
     }
   </style>
 </head>
 <body>
   <header>
     <h1>TRIGEN-Orchestration</h1>
-    <button id="refresh" class="refresh primary" title="状態を更新 / Refresh" aria-label="Refresh">
-      <span class="codicon codicon-refresh" aria-hidden="true"></span>
-    </button>
+    <div class="headerActions">
+      <span id="refreshLoading" class="refreshLoading"></span>
+      <button id="refresh" class="refresh primary" title="状態を更新 / Refresh" aria-label="Refresh">
+        <span class="codicon codicon-refresh" aria-hidden="true"></span>
+      </button>
+    </div>
   </header>
   <div id="status" class="statusLine"></div>
   <div id="agents" class="agents"></div>
@@ -416,11 +503,12 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
   </section>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    let state = { providers: [], busy: false };
+    let state = { providers: [], busy: false, refreshing: false };
     const statusEl = document.getElementById('status');
     const agentsEl = document.getElementById('agents');
     const createRulesButton = document.getElementById('createRules');
     const rulesHelpEl = document.getElementById('rulesHelp');
+    const refreshLoadingEl = document.getElementById('refreshLoading');
 
     document.getElementById('refresh').addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh' });
@@ -438,6 +526,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
 
     function render() {
       statusEl.textContent = state.message || '';
+      refreshLoadingEl.textContent = state.refreshing ? 'Loading...' : '';
       agentsEl.innerHTML = '';
       for (const provider of state.providers) {
         const item = document.createElement('section');
@@ -479,6 +568,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
             \${meter('five', '5時間', '5h', provider.usage.fiveHourRemainingPercent, provider.usage.fiveHourRefreshAt, provider.linked)}
             \${meter('weekly', '週間', 'Weekly', provider.usage.weeklyRemainingPercent, provider.usage.weeklyRefreshAt, provider.linked)}
           </div>
+          \${statusPanel(provider)}
         \`;
         agentsEl.appendChild(item);
       }
@@ -507,8 +597,13 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
           });
         });
       });
+      document.querySelectorAll('[data-copy-status]').forEach(button => {
+        button.addEventListener('click', () => {
+          vscode.postMessage({ type: 'copyStatusLog', providerId: button.dataset.copyStatus });
+        });
+      });
       document.querySelectorAll('button, select').forEach(element => {
-        if (element.id !== 'createRules') {
+        if (element.id !== 'createRules' && !element.hasAttribute('data-copy-status')) {
           element.disabled = !!state.busy;
         }
       });
@@ -525,7 +620,6 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       const hasValue = Number.isFinite(value);
       const percent = hasValue ? value : 0;
       const label = hasValue ? \`\${value}%\` : linked ? '公式取得口なし' : '未連携';
-      const note = refreshAt || (linked ? '公式の安定した残量APIが無い場合は保存しません。' : 'Login後に連携状態を確認します。');
       return \`
         <div>
           <div class="meterTop">
@@ -533,7 +627,22 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
             <span class="\${hasValue ? '' : 'tokenUnavailable'}">\${escapeHtml(label)}</span>
           </div>
           <progress class="\${kind}" max="100" value="\${percent}"></progress>
-          <div class="meterNote">\${escapeHtml(note)}</div>
+          \${refreshAt ? \`<div class="small">\${escapeHtml(refreshAt)}</div>\` : ''}
+        </div>
+      \`;
+    }
+
+    function statusPanel(provider) {
+      const log = provider.statusLog || 'ステータス情報はまだありません。 / No status information yet.';
+      return \`
+        <div class="statusPanel">
+          <div class="statusPanelHead">
+            <span>ステータス情報 <span class="enInline">Status Info</span></span>
+            <button class="statusCopy" data-copy-status="\${provider.id}" title="ログコピー / Copy log" aria-label="Copy status log">
+              <span class="codicon codicon-copy" aria-hidden="true"></span>
+            </button>
+          </div>
+          <pre class="statusLog \${provider.statusLog ? '' : 'emptyLog'}">\${escapeHtml(log)}</pre>
         </div>
       \`;
     }
@@ -766,8 +875,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     const confirmation = await vscode.window.showWarningMessage(
       `「${thread.title}」を削除しますか？`,
       { modal: true },
-      "スレッドを削除",
-      "キャンセル"
+      "スレッドを削除"
     );
     if (confirmation !== "スレッドを削除") {
       return;
@@ -820,21 +928,13 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
     try {
       await this.refreshDisplayConfig(false);
       const result = await this.delegate.dispatchImplicit(trimmed, attachments);
-      const messages: ChatMessage[] = [
-        {
-          id: newId("msg"),
-          role: "trigen",
-          text: result.routeSummary,
-          timestamp: new Date().toISOString()
-        },
-        ...result.results.map((item): ChatMessage => ({
+      const messages: ChatMessage[] = result.results.map((item): ChatMessage => ({
           id: newId("msg"),
           role: "agent",
           providerId: item.providerId,
-          text: providerResultText(item.ok, item.skipped, item.stdout, item.stderr, item.error),
+          text: providerResultText(item.providerId, item.ok, item.skipped, item.stdout, item.stderr, item.error),
           timestamp: item.endedAt
-        }))
-      ];
+        }));
       this.replaceThread(appendMessages(this.activeThread() ?? thread, messages), {
         busy: false,
         message: "完了しました / Completed."
@@ -920,6 +1020,7 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       --accentText: var(--vscode-button-foreground);
       --button2: var(--vscode-button-secondaryBackground);
       --button2Text: var(--vscode-button-secondaryForeground);
+      --active: #4fc1ff;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -982,6 +1083,10 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       border-radius: 7px;
       padding: 8px;
       cursor: pointer;
+    }
+    .threadItem:hover:not(:disabled) {
+      background: rgba(79, 193, 255, 0.14);
+      border-color: rgba(79, 193, 255, 0.45);
     }
     .threadItemTitle {
       display: block;
@@ -1105,6 +1210,14 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       font: 13px var(--vscode-font-family);
       cursor: pointer;
     }
+    button:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+    button:active:not(:disabled) {
+      background: var(--active);
+      color: #06131a;
+      transform: translateY(1px);
+    }
     button.icon {
       display: inline-flex;
       align-items: center;
@@ -1169,7 +1282,12 @@ export class UnifiedChatViewProvider implements vscode.WebviewViewProvider {
       min-height: 26px;
     }
     .optionMenu button:hover {
-      background: var(--vscode-list-hoverBackground, var(--button2));
+      background: rgba(79, 193, 255, 0.22);
+      color: var(--text);
+    }
+    .optionMenu button:active {
+      background: var(--active);
+      color: #06131a;
     }
     .optionMenu button.danger {
       color: var(--vscode-errorForeground, #f48771);
@@ -1426,6 +1544,7 @@ type SettingsMessage =
   | { type: "createRules" }
   | { type: "login"; providerId: ProviderId }
   | { type: "logout"; providerId: ProviderId }
+  | { type: "copyStatusLog"; providerId: ProviderId }
   | { type: "setting"; providerId: ProviderId; key: keyof AgentRuntimeSettings; value: string };
 
 type ChatWebviewMessage =
@@ -1447,7 +1566,7 @@ function isSettingsMessage(value: unknown): value is SettingsMessage {
   if (candidate.type === "refresh" || candidate.type === "createRules") {
     return true;
   }
-  if ((candidate.type === "login" || candidate.type === "logout") && isProviderId(candidate.providerId)) {
+  if ((candidate.type === "login" || candidate.type === "logout" || candidate.type === "copyStatusLog") && isProviderId(candidate.providerId)) {
     return true;
   }
   return candidate.type === "setting"
@@ -1534,15 +1653,66 @@ function withAttachments(prompt: string, attachments: readonly string[]): string
 }
 
 function providerResultText(
+  providerId: ProviderId,
   ok: boolean,
   skipped: boolean | undefined,
   stdout: string,
   stderr: string,
   error?: string
 ): string {
-  const status = ok ? "完了 / OK" : skipped ? "未実行 / Skipped" : "失敗 / Failed";
-  const output = stdout.trim() || stderr.trim() || error || "出力なし / No output.";
-  return `${status}\n\n${output}`;
+  if (skipped) {
+    return "このエージェントは未実行です。CLI設定またはLogin連携を確認してください。\nSkipped. Check the CLI setup or account link.";
+  }
+  const cleanOutput = cleanProviderOutput(providerId, stdout);
+  if (ok) {
+    return cleanOutput || "完了しました。出力本文はありません。\nCompleted. No response body was returned.";
+  }
+  const detail = compactProviderFailure(error, stderr);
+  return [
+    "このエージェントの実行に失敗しました。左カラムのステータス情報を確認してください。",
+    "This agent failed. Check Status Info in the left column.",
+    detail ? `\n要約 / Summary: ${detail}` : ""
+  ].join("\n").trim();
+}
+
+function cleanProviderOutput(providerId: ProviderId, stdout: string): string {
+  if (providerId === "codex") {
+    return extractCodexAgentText(stdout) ?? "";
+  }
+  return stdout.trim();
+}
+
+function extractCodexAgentText(stdout: string): string | undefined {
+  const messages: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(trimmed) as {
+        type?: unknown;
+        text?: unknown;
+        item?: { type?: unknown; text?: unknown };
+      };
+      if (parsed.type === "agent_message" && typeof parsed.text === "string") {
+        messages.push(parsed.text);
+      } else if (parsed.item?.type === "agent_message" && typeof parsed.item.text === "string") {
+        messages.push(parsed.item.text);
+      }
+    } catch {
+      // Ignore non-JSON provider chatter; it belongs in Status Info.
+    }
+  }
+  return messages.length > 0 ? messages.join("\n\n") : undefined;
+}
+
+function compactProviderFailure(error: string | undefined, stderr: string): string {
+  const source = error?.trim() || stderr.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
+  if (!source) {
+    return "";
+  }
+  return source.length > 180 ? `${source.slice(0, 177)}...` : source;
 }
 
 function formatMarkdownThread(thread: ChatThread, displayConfig: TrigenDisplayConfig): string {

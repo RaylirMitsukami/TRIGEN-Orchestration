@@ -137,12 +137,10 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
     docsUrl: "https://gemini.google.com/",
     loginUrl: "https://gemini.google.com/",
     modelOptions: [
-      modelProfile("gemini-3.1-pro-preview", GEMINI_THINKING_PRO, GEMINI_CAPABILITIES, "high", "default"),
-      modelProfile("gemini-3.5-flash", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "auto_edit"),
-      modelProfile("gemini-3-flash-preview", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "auto_edit"),
-      modelProfile("gemini-3.1-flash-lite", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "default")
+      modelProfile("gemini-2.5-flash", GEMINI_THINKING_STANDARD, GEMINI_CAPABILITIES, "medium", "default"),
+      modelProfile("gemini-2.5-pro", GEMINI_THINKING_PRO, GEMINI_CAPABILITIES, "high", "default")
     ],
-    defaultModel: "gemini-3.5-flash"
+    defaultModel: "gemini-2.5-flash"
   }
 ];
 

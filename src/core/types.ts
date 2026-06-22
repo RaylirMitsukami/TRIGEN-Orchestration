@@ -74,6 +74,7 @@ export interface ProviderControlState {
   readonly loginUrl: string;
   readonly docsUrl: string;
   readonly webContextStatus: "available-through-provider" | "link-required";
+  readonly statusLog: string;
 }
 
 export interface TrigenRulesStatus {

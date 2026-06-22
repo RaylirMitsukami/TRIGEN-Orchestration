@@ -49,26 +49,26 @@ describe("providers", () => {
     assert.equal(gemini.loginUrl, "https://gemini.google.com/");
     assert.deepEqual(gemini.commandCandidates, ["gemini", "npx"]);
     assert.deepEqual(gemini.modelOptions.map((item) => item.name), [
-      "gemini-3.1-pro-preview",
-      "gemini-3.5-flash",
-      "gemini-3-flash-preview",
-      "gemini-3.1-flash-lite"
+      "gemini-2.5-flash",
+      "gemini-2.5-pro"
     ]);
+    assert.equal(gemini.defaultModel, "gemini-2.5-flash");
     assert.equal(gemini.modelOptions.some((item) => item.name === "Gemini 3.1 Flash"), false);
+    assert.equal(gemini.modelOptions.some((item) => item.name === "gemini-3.5-flash"), false);
   });
 
   it("uses model-specific reasoning and permission profiles", () => {
     assert.deepEqual(getModelProfile("claude", "opus").reasoningLevels.map((item) => item.id), ["low", "medium", "high", "xhigh", "max"]);
     assert.deepEqual(getModelProfile("claude", "sonnet").reasoningLevels.map((item) => item.id), ["low", "medium", "high", "max"]);
     assert.deepEqual(getModelProfile("claude", "haiku").reasoningLevels.map((item) => item.id), ["auto"]);
-    assert.deepEqual(getModelProfile("gemini", "gemini-3.1-pro-preview").reasoningLevels.map((item) => item.id), ["low", "medium", "high"]);
-    assert.deepEqual(getModelProfile("gemini", "gemini-3.5-flash").reasoningLevels.map((item) => item.id), ["minimal", "low", "medium", "high"]);
+    assert.deepEqual(getModelProfile("gemini", "gemini-2.5-pro").reasoningLevels.map((item) => item.id), ["low", "medium", "high"]);
+    assert.deepEqual(getModelProfile("gemini", "gemini-2.5-flash").reasoningLevels.map((item) => item.id), ["minimal", "low", "medium", "high"]);
     assert.deepEqual(getModelProfile("codex", "gpt-5.5").permissions.map((item) => item.id), [
       "read-only",
       "workspace-write",
       "danger-full-access"
     ]);
-    assert.deepEqual(getModelProfile("gemini", "gemini-3.5-flash").permissions.map((item) => item.id), [
+    assert.deepEqual(getModelProfile("gemini", "gemini-2.5-flash").permissions.map((item) => item.id), [
       "plan",
       "default",
       "auto_edit",

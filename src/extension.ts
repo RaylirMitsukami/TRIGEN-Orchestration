@@ -40,9 +40,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const controller = new TrigenController(output, context);
   const settingsView = new SettingsViewProvider(context, controller);
   const unifiedChatView = new UnifiedChatViewProvider(context, controller);
+  const providerStatusSubscription = controller.onDidUpdateProviderStatus(() => {
+    void settingsView.refresh("ステータス情報を更新しました / Status updated.", { showBusy: false });
+  });
 
   context.subscriptions.push(
     output,
+    providerStatusSubscription,
     vscode.window.registerWebviewViewProvider("trigen.settings", settingsView),
     vscode.window.registerWebviewViewProvider("trigen.integratedChat", unifiedChatView),
     vscode.commands.registerCommand("trigen.openSettings", () => settingsView.reveal()),
@@ -70,6 +74,10 @@ export function deactivate(): void {
 }
 
 class TrigenController {
+  private readonly providerStatusLogs: Partial<Record<ProviderId, string>> = {};
+  private readonly providerStatusEmitter = new vscode.EventEmitter<void>();
+  readonly onDidUpdateProviderStatus = this.providerStatusEmitter.event;
+
   constructor(
     private readonly output: vscode.OutputChannel,
     private readonly context: vscode.ExtensionContext
@@ -105,9 +113,18 @@ class TrigenController {
         permissionOptions: getModelProfile(provider.id, providerSettings.model).permissions,
         loginUrl: provider.loginUrl,
         docsUrl: provider.docsUrl,
-        webContextStatus: isLinked ? "available-through-provider" : "link-required"
+        webContextStatus: isLinked ? "available-through-provider" : "link-required",
+        statusLog: this.providerStatusLogs[provider.id] ?? ""
       };
     });
+  }
+
+  async copyProviderStatusLog(providerId: ProviderId): Promise<void> {
+    const provider = getProviderDefinition(providerId);
+    const log = this.providerStatusLogs[providerId]?.trim()
+      || "ステータス情報はまだありません。 / No status information yet.";
+    await vscode.env.clipboard.writeText(log);
+    vscode.window.showInformationMessage(`${provider.shortLabel} のステータスログをコピーしました / Status log copied.`);
   }
 
   async login(providerId: ProviderId): Promise<boolean> {
@@ -264,7 +281,7 @@ class TrigenController {
     const provider = getProviderDefinition(request.providerId);
     if (!health.cliPath) {
       const now = new Date().toISOString();
-      return {
+      const skippedResult: ProviderRunResult = {
         providerId: request.providerId,
         ok: false,
         skipped: true,
@@ -277,6 +294,8 @@ class TrigenController {
         estimatedOutputTokens: 0,
         error: `${provider.label} CLI is not configured or not installed.`
       };
+      this.recordProviderStatus(skippedResult);
+      return skippedResult;
     }
 
     const config = vscode.workspace.getConfiguration("trigen");
@@ -297,7 +316,16 @@ class TrigenController {
     };
 
     this.output.appendLine(`[TRIGEN] Running ${provider.label}: ${health.cliPath} ${args.join(" ")}`);
-    return await runProviderProcess(providerRequest, health.cliPath, args, timeoutMs);
+    const result = await runProviderProcess(providerRequest, health.cliPath, args, timeoutMs);
+    this.recordProviderStatus(result);
+    return result;
+  }
+
+  private recordProviderStatus(result: ProviderRunResult): void {
+    const current = this.providerStatusLogs[result.providerId]?.trim();
+    const next = [current, formatProviderStatusEntry(result)].filter(Boolean).join("\n\n---\n\n");
+    this.providerStatusLogs[result.providerId] = trimStatusLog(next);
+    this.providerStatusEmitter.fire();
   }
 
   private async snapshot(workspaceFolder: string): Promise<WorkspaceSnapshot> {
@@ -358,6 +386,53 @@ class TrigenController {
       source: "unavailable"
     };
   }
+}
+
+function formatProviderStatusEntry(result: ProviderRunResult): string {
+  const provider = getProviderDefinition(result.providerId);
+  const status = result.ok ? "OK" : result.skipped ? "Skipped" : "Failed";
+  const lines = [
+    `[${formatLocalLogTime(result.endedAt)}] ${provider.shortLabel} ${status}`,
+    `Status: ${status}`,
+    `Duration: ${result.durationMs}ms`,
+    `Estimated tokens: prompt=${result.estimatedPromptTokens}, output=${result.estimatedOutputTokens}`
+  ];
+  if (result.commandLine) {
+    lines.push(`Command: ${result.commandLine}`);
+  }
+  if (typeof result.exitCode !== "undefined" || result.signal) {
+    lines.push(`Exit: code=${result.exitCode ?? "none"}, signal=${result.signal ?? "none"}`);
+  }
+  if (result.error) {
+    lines.push("", "Error:", result.error);
+  }
+  if (result.stdout.trim()) {
+    lines.push("", "STDOUT:", result.stdout.trim());
+  }
+  if (result.stderr.trim()) {
+    lines.push("", "STDERR:", result.stderr.trim());
+  }
+  if (!result.error && !result.stdout.trim() && !result.stderr.trim()) {
+    lines.push("", "No provider output.");
+  }
+  return lines.join("\n");
+}
+
+function trimStatusLog(value: string): string {
+  const maxLength = 60000;
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `... trimmed older status log ...\n${value.slice(-maxLength)}`;
+}
+
+function formatLocalLogTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const pad = (number: number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function configuredProviderArgs(
