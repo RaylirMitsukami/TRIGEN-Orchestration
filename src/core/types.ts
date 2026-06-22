@@ -115,6 +115,7 @@ export interface ProviderRunRequest {
   readonly userPrompt: string;
   readonly prompt: string;
   readonly workspaceFolder: string;
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 export interface ProviderRunResult {

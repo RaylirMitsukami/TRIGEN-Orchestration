@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import * as os from "node:os";
@@ -231,7 +232,7 @@ export async function runProviderProcess(
     const child = spawn(command, args, {
       cwd: request.workspaceFolder,
       stdio: ["pipe", "pipe", "pipe"],
-      env: providerProcessEnv(request.providerId)
+      env: buildProviderProcessEnv(request.providerId, request.env)
     });
 
     let stdout = "";
@@ -276,6 +277,9 @@ export async function runProviderProcess(
       clearTimeout(timer);
       const ended = Date.now();
       const timedOut = signal === "SIGTERM" && ended - started >= timeoutMs;
+      const error = timedOut
+        ? `Provider timed out after ${timeoutMs}ms`
+        : classifyProviderFailure(request.providerId, stdout, stderr, exitCode, signal);
       resolve({
         providerId: request.providerId,
         ok: exitCode === 0 && !timedOut,
@@ -289,7 +293,7 @@ export async function runProviderProcess(
         estimatedPromptTokens: estimateTokens(request.prompt),
         estimatedOutputTokens: estimateTokens(stdout + stderr),
         commandLine: commandLine(command, args),
-        error: timedOut ? `Provider timed out after ${timeoutMs}ms` : undefined
+        error
       });
     });
 
@@ -297,17 +301,64 @@ export async function runProviderProcess(
   });
 }
 
-function providerProcessEnv(providerId: ProviderId): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  if (
-    providerId === "gemini"
-    && !env.GEMINI_API_KEY
-    && !env.GOOGLE_GENAI_USE_VERTEXAI
-    && !env.GOOGLE_GENAI_USE_GCA
-  ) {
-    env.GOOGLE_GENAI_USE_GCA = "true";
+export function buildProviderProcessEnv(providerId: ProviderId, extraEnv?: Readonly<Record<string, string>>): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...extraEnv };
+  if (providerId === "gemini") {
+    if (!env.GEMINI_API_KEY && !env.GOOGLE_GENAI_USE_VERTEXAI && !env.GOOGLE_GENAI_USE_GCA) {
+      env.GOOGLE_GENAI_USE_GCA = "true";
+    }
+    const patchPath = geminiCliHttpPatchPath();
+    if (patchPath) {
+      env.NODE_OPTIONS = appendNodeRequire(env.NODE_OPTIONS, patchPath);
+    }
   }
   return env;
+}
+
+function classifyProviderFailure(
+  providerId: ProviderId,
+  stdout: string,
+  stderr: string,
+  exitCode: number | null,
+  signal: NodeJS.Signals | null
+): string | undefined {
+  if (exitCode === 0 && !signal) {
+    return undefined;
+  }
+  if (providerId !== "gemini") {
+    return undefined;
+  }
+
+  const output = `${stdout}\n${stderr}`;
+  if (output.includes("Please set an Auth method") || output.includes("Authentication cancelled by user")) {
+    return "Gemini CLI authentication is not complete. Use Gemini Login, open the CLI authentication terminal, and finish the official browser login.";
+  }
+  if (output.includes("ProjectIdRequiredError")) {
+    return "Gemini CLI requires a Google Cloud project ID for this account. Set trigen.providers.gemini.googleCloudProject to the string project ID.";
+  }
+  if (output.includes("UNSUPPORTED_CLIENT") || output.includes("Gemini Code Assist for individuals")) {
+    return "Gemini CLI rejected the account as the old individuals client. Configure trigen.providers.gemini.googleCloudProject for standard-tier Code Assist, then rerun Gemini CLI authentication.";
+  }
+  if (output.includes("ERR_STREAM_PREMATURE_CLOSE") || output.includes("Premature close")) {
+    return "Gemini CLI failed while reading Google Code Assist response data. TRIGEN applies a compression workaround for Gemini child processes; rerun after reinstalling the latest extension build.";
+  }
+  return undefined;
+}
+
+function geminiCliHttpPatchPath(): string | undefined {
+  const patchPath = path.resolve(__dirname, "..", "..", "scripts", "gemini-cli-http-patch.cjs");
+  return existsSync(patchPath) ? patchPath : undefined;
+}
+
+function appendNodeRequire(currentOptions: string | undefined, requirePath: string): string {
+  const requireOption = `--require=${requirePath}`;
+  if (!currentOptions?.trim()) {
+    return requireOption;
+  }
+  if (currentOptions.includes(requireOption)) {
+    return currentOptions;
+  }
+  return `${currentOptions} ${requireOption}`;
 }
 
 async function resolveOneExecutable(candidate: string, envPath: string): Promise<string | undefined> {

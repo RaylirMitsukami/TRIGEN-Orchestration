@@ -1,6 +1,6 @@
 import * as assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expandArgs, estimateTokens, getModelProfile, getProviderDefinition, PROVIDERS, shellQuote } from "../core/providers";
+import { buildProviderProcessEnv, expandArgs, estimateTokens, getModelProfile, getProviderDefinition, PROVIDERS, shellQuote } from "../core/providers";
 
 describe("providers", () => {
   it("expands workspace variables in command args", () => {
@@ -22,6 +22,18 @@ describe("providers", () => {
   it("quotes shell values when needed", () => {
     assert.equal(shellQuote("codex"), "codex");
     assert.equal(shellQuote("hello world"), "'hello world'");
+  });
+
+  it("builds Gemini CLI runtime env with GCA, project ID, and HTTP patch", () => {
+    const env = buildProviderProcessEnv("gemini", {
+      GOOGLE_CLOUD_PROJECT: "example-project",
+      GOOGLE_CLOUD_PROJECT_ID: "example-project"
+    });
+
+    assert.equal(env.GOOGLE_GENAI_USE_GCA, "true");
+    assert.equal(env.GOOGLE_CLOUD_PROJECT, "example-project");
+    assert.equal(env.GOOGLE_CLOUD_PROJECT_ID, "example-project");
+    assert.match(env.NODE_OPTIONS ?? "", /gemini-cli-http-patch\.cjs/);
   });
 
   it("does not route providers through official VS Code extension dependencies", () => {

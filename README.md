@@ -100,6 +100,8 @@ Use `.TRIGEN-Rules` for development policies, prohibitions, output formats, revi
    Open TRIGEN from the left Activity Bar and run Login for Codex, Claude, and Gemini.
    Geminiは初回のみ、表示される案内から`CLI認証を開く`を選び、公式CLIのブラウザ認証を完了してください。
    For Gemini, choose `CLI認証を開く` on the first run and complete the official CLI browser authentication.
+   Gemini Code Assistのstandard-tierアカウントでは、Google Cloudの文字列Project IDが必要になる場合があります。その場合はVS Code設定の`trigen.providers.gemini.googleCloudProject`へProject IDを入れてください。これはAPIキーではありません。
+   Gemini Code Assist standard-tier accounts may require a string Google Cloud Project ID. In that case, set `trigen.providers.gemini.googleCloudProject` in VS Code settings. This is not an API key.
 4. 各エージェントのモデル、推論レベル、権限を選択します。
    Select each agent's model, reasoning level, and permission.
 5. 右Secondary Side BarのTRIGENを開き、スレッドを選ぶか新規作成して、統合チャットに依頼を書いて送信ボタンで実行します。

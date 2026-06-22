@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { SettingsViewProvider, UnifiedChatViewProvider, type IntegratedDispatchResult } from "./ui/controlCenter";
-import { expandArgs, getModelProfile, getProviderDefinition, PROVIDERS, resolveExecutable, runProviderProcess } from "./core/providers";
+import { buildProviderProcessEnv, expandArgs, getModelProfile, getProviderDefinition, PROVIDERS, resolveExecutable, runProviderProcess } from "./core/providers";
 import {
   DEFAULT_RULE_FILE_NAMES,
   DEFAULT_TRIGEN_DISPLAY_CONFIG,
@@ -225,6 +225,10 @@ class TrigenController {
     notes.push("Official VS Code extension dependency is disabled; link the provider through its official browser login.");
     if (providerId === "gemini") {
       notes.push("Gemini CLI runs with GOOGLE_GENAI_USE_GCA=true when no Gemini API or Vertex env is configured; first run may require browser authentication.");
+      const geminiProject = geminiGoogleCloudProject(config);
+      notes.push(geminiProject
+        ? `Gemini Google Cloud project: ${geminiProject}`
+        : "Gemini standard-tier Code Assist may require trigen.providers.gemini.googleCloudProject.");
     }
     notes.push(cliPath ? `CLI detected: ${cliPath}` : `CLI not detected. Configure trigen.providers.${providerId}.command when installed.`);
 
@@ -281,8 +285,13 @@ class TrigenController {
       ...providerExecutionVariables(request.providerId, settings)
     });
 
+    const providerRequest: ProviderRunRequest = {
+      ...request,
+      env: providerExtraEnv(config, request.providerId)
+    };
+
     this.output.appendLine(`[TRIGEN] Running ${provider.label}: ${health.cliPath} ${args.join(" ")}`);
-    return await runProviderProcess(request, health.cliPath, args, timeoutMs);
+    return await runProviderProcess(providerRequest, health.cliPath, args, timeoutMs);
   }
 
   private async snapshot(workspaceFolder: string): Promise<WorkspaceSnapshot> {
@@ -422,12 +431,28 @@ async function maybeOpenGeminiCliAuthTerminal(): Promise<void> {
   }
   const terminal = vscode.window.createTerminal({
     name: "TRIGEN Gemini CLI Login",
-    env: {
-      GOOGLE_GENAI_USE_GCA: "true"
-    }
+    env: buildProviderProcessEnv("gemini", providerExtraEnv(vscode.workspace.getConfiguration("trigen"), "gemini"))
   });
   terminal.show(true);
   terminal.sendText("npx -y @google/gemini-cli");
+}
+
+function providerExtraEnv(config: vscode.WorkspaceConfiguration, providerId: ProviderId): Readonly<Record<string, string>> | undefined {
+  if (providerId !== "gemini") {
+    return undefined;
+  }
+  const googleCloudProject = geminiGoogleCloudProject(config);
+  if (!googleCloudProject) {
+    return undefined;
+  }
+  return {
+    GOOGLE_CLOUD_PROJECT: googleCloudProject,
+    GOOGLE_CLOUD_PROJECT_ID: googleCloudProject
+  };
+}
+
+function geminiGoogleCloudProject(config: vscode.WorkspaceConfiguration): string {
+  return config.get<string>("providers.gemini.googleCloudProject", "").trim();
 }
 
 function requireWorkspaceFolder(): string {

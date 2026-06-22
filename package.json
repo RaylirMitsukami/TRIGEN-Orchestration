@@ -140,6 +140,11 @@
           },
           "description": "Arguments used when TRIGEN dispatches to Gemini. The prompt is sent on stdin. When Gemini is not on PATH, TRIGEN can use npx with @google/gemini-cli automatically."
         },
+        "trigen.providers.gemini.googleCloudProject": {
+          "type": "string",
+          "default": "",
+          "description": "Optional string Google Cloud project ID passed as GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_PROJECT_ID for Gemini Code Assist standard-tier accounts. This is not an API key."
+        },
         "trigen.execution.timeoutMs": {
           "type": "number",
           "default": 600000,
