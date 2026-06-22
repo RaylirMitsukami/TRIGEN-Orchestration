@@ -339,10 +339,22 @@ function classifyProviderFailure(
   if (output.includes("UNSUPPORTED_CLIENT") || output.includes("Gemini Code Assist for individuals")) {
     return "Gemini CLI rejected the account as the old individuals client. Configure trigen.providers.gemini.googleCloudProject for standard-tier Code Assist, then rerun Gemini CLI authentication.";
   }
+  if (output.includes("SERVICE_DISABLED") || output.includes("cloudaicompanion.googleapis.com")) {
+    const activationUrl = firstRegexGroup(output, /https:\/\/console\.developers\.google\.com\/apis\/api\/cloudaicompanion\.googleapis\.com\/overview\?project=[^\s"']+/);
+    return [
+      "Gemini CLI reached the model API, but Gemini for Google Cloud API is disabled for the configured project.",
+      "Enable cloudaicompanion.googleapis.com for trigen.providers.gemini.googleCloudProject, then retry.",
+      activationUrl ? `Activation URL: ${activationUrl}` : undefined
+    ].filter(Boolean).join(" ");
+  }
   if (output.includes("ERR_STREAM_PREMATURE_CLOSE") || output.includes("Premature close")) {
     return "Gemini CLI failed while reading Google Code Assist response data. TRIGEN applies a compression workaround for Gemini child processes; rerun after reinstalling the latest extension build.";
   }
   return undefined;
+}
+
+function firstRegexGroup(value: string, pattern: RegExp): string | undefined {
+  return value.match(pattern)?.[0];
 }
 
 function geminiCliHttpPatchPath(): string | undefined {

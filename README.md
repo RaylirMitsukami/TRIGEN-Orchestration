@@ -102,6 +102,8 @@ Use `.TRIGEN-Rules` for development policies, prohibitions, output formats, revi
    For Gemini, choose `CLI認証を開く` on the first run and complete the official CLI browser authentication.
    Gemini Code Assistのstandard-tierアカウントでは、Google Cloudの文字列Project IDが必要になる場合があります。その場合はVS Code設定の`trigen.providers.gemini.googleCloudProject`へProject IDを入れてください。これはAPIキーではありません。
    Gemini Code Assist standard-tier accounts may require a string Google Cloud Project ID. In that case, set `trigen.providers.gemini.googleCloudProject` in VS Code settings. This is not an API key.
+   `SERVICE_DISABLED`が表示される場合は、そのProject IDで`Gemini for Google Cloud API`（`cloudaicompanion.googleapis.com`）を有効化してから再実行してください。
+   If `SERVICE_DISABLED` appears, enable `Gemini for Google Cloud API` (`cloudaicompanion.googleapis.com`) for that Project ID, then retry.
 4. 各エージェントのモデル、推論レベル、権限を選択します。
    Select each agent's model, reasoning level, and permission.
 5. 右Secondary Side BarのTRIGENを開き、スレッドを選ぶか新規作成して、統合チャットに依頼を書いて送信ボタンで実行します。
