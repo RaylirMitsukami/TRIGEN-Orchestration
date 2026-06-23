@@ -434,20 +434,17 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
     }
     .statusPanel {
       margin-top: 6px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      background: #050505;
+      display: grid;
+      gap: 3px;
     }
     .statusPanelHead {
       display: grid;
       grid-template-columns: 1fr auto;
       align-items: center;
       gap: 6px;
-      border-bottom: 1px solid var(--border);
-      padding: 3px 5px;
-      color: var(--muted);
-      font-size: 10px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 600;
     }
     .statusCopy {
       min-width: 22px;
@@ -471,8 +468,10 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       max-height: 52px;
       overflow-y: auto;
       padding: 5px;
-      color: #a6a6a6;
-      background: #050505;
+      border: 1px solid var(--vscode-input-border, var(--border));
+      border-radius: 5px;
+      color: #c9c9c9;
+      background: var(--input);
       font: 10px/1.3 var(--vscode-editor-font-family);
       white-space: pre-wrap;
       word-break: break-word;
@@ -637,7 +636,7 @@ export class SettingsViewProvider implements vscode.WebviewViewProvider {
       return \`
         <div class="statusPanel">
           <div class="statusPanelHead">
-            <span>ステータス情報 <span class="enInline">Status Info</span></span>
+            <span class="labelText"><span>ステータス情報</span><span class="enInline">Status Info</span></span>
             <button class="statusCopy" data-copy-status="\${provider.id}" title="ログコピー / Copy log" aria-label="Copy status log">
               <span class="codicon codicon-copy" aria-hidden="true"></span>
             </button>
