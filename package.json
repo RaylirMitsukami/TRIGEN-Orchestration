@@ -2,7 +2,7 @@
   "name": "trigen-orchestration",
   "displayName": "TRIGEN-Orchestration",
   "description": "Codex、Claude、Geminiを1つの統合チャットで扱うVS Code用3エージェント・オーケストレーション拡張。",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "RaylirMitsukami",
   "license": "MIT",
   "private": false,
@@ -26,6 +26,17 @@
     "agents"
   ],
   "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:trigen.settings",
+    "onView:trigen.integratedChat",
+    "onCommand:trigen.openSettings",
+    "onCommand:trigen.openIntegratedChat",
+    "onCommand:trigen.openConsole",
+    "onCommand:trigen.runHealthCheck",
+    "onCommand:trigen.loadRules",
+    "onCommand:trigen.openGeminiCloudApiActivation"
+  ],
   "contributes": {
     "commands": [
       {
@@ -35,6 +46,10 @@
       {
         "command": "trigen.openIntegratedChat",
         "title": "TRIGEN: Open Integrated Chat"
+      },
+      {
+        "command": "trigen.openConsole",
+        "title": "TRIGEN: Open Console"
       },
       {
         "command": "trigen.runHealthCheck",

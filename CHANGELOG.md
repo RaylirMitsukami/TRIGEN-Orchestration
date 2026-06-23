@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Replaced the TRIGEN logo assets in `media/`.
+- Added explicit activation events for TRIGEN views and commands so the extension host starts reliably when the TRIGEN activity view or commands are used.
+- Added the missing `TRIGEN: Open Console` command contribution.
+- Added manifest tests to keep view activation and command contributions covered.
+
 ## 0.1.4
 
 - Fixed Codex CLI execution by removing the unsupported `--ask-for-approval` argument from `codex exec` dispatch.
